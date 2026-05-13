@@ -16,42 +16,46 @@ const CACHE_KEY='members_cache';
 function saveCache(){localStorage.setItem(CACHE_KEY,JSON.stringify(members));}
 function loadCache(){return JSON.parse(localStorage.getItem(CACHE_KEY)||'[]');}
 
-// ── FIRESTORE 초기화 ──
-function initFirestore(){
-  if(fsUnsub)fsUnsub();
+// ── REALTIME DATABASE 초기화 ──
+let dbRef=null;
+function initDatabase(){
+  if(fsUnsub){fsUnsub();fsUnsub=null;}
   migrationChecked=false;
   useLocalOnly=false;
 
-  // 1) 캐시된 데이터 즉시 표시 (Firestore 응답 전)
+  // 1) 캐시 즉시 표시
   const cached=loadCache();
   if(cached.length){members=cached;render();updateCount();}
 
-  // 2) Firestore 실시간 동기화
+  // 2) 3초 타임아웃
   const timeout=setTimeout(()=>{
-    // 3초 내 응답 없으면 로컬 전용 모드
     if(!migrationChecked){
       useLocalOnly=true;
-      toast('Firebase 연결 지연 - 로컬 저장 모드로 전환','error');
+      toast('Firebase 연결 지연 - 로컬 저장 모드','error');
       members=loadCache();render();updateCount();
     }
   },3000);
 
-  fsUnsub=db.collection('members').onSnapshot(snap=>{
+  // 3) Realtime DB 실시간 리스너
+  dbRef=database.ref('members');
+  const handler=dbRef.on('value',snap=>{
     clearTimeout(timeout);
     migrationChecked=true;
-    members=snap.docs.map(d=>({id:d.id,...d.data()}));
-    saveCache(); // Firestore 데이터를 로컬에도 보관
+    const val=snap.val();
+    members=val?Object.entries(val).map(([id,d])=>({id,...d})):[];
+    saveCache();
     render();updateCount();
     // 구버전 로컬 데이터 마이그레이션 제안
     const legacy=JSON.parse(localStorage.getItem('members')||'[]');
-    if(legacy.length&&snap.empty)checkMigration(legacy);
+    if(legacy.length&&!members.length)checkMigration(legacy);
   },err=>{
     clearTimeout(timeout);
     useLocalOnly=true;
-    console.error('Firestore 오류:',err);
-    toast('Firebase 연결 실패('+err.code+') - 로컬 저장 모드','error');
+    console.error('DB 오류:',err);
+    toast('Firebase 오류('+err.code+') - 로컬 저장 모드','error');
     members=loadCache();render();updateCount();
   });
+  fsUnsub=()=>{if(dbRef)dbRef.off('value',handler);};
 }
 
 function checkMigration(loc){
@@ -59,16 +63,17 @@ function checkMigration(loc){
 }
 async function migrateData(loc){
   try{
-    const batch=db.batch();
+    const updates={};
     for(const m of loc){
       let photo=m.photo||'';
       if(photo.startsWith('data:')){
         const r=storage.ref('photos/'+(m.id||Date.now()));
         await r.putString(photo,'data_url');photo=await r.getDownloadURL();
       }
-      batch.set(db.collection('members').doc(m.id||Date.now().toString()),{...m,photo});
+      const id=m.id||Date.now().toString();
+      updates[id]={...m,id,photo};
     }
-    await batch.commit();
+    await database.ref('members').update(updates);
     localStorage.removeItem('members');
     toast(`${loc.length}명 마이그레이션 완료 ✅`,'success');
   }catch(e){toast('마이그레이션 실패: '+e.message,'error');}
@@ -225,8 +230,8 @@ function showLogin(){
 function doLogin(){
   const pw=document.getElementById('login-pw-input').value;
   const err=document.getElementById('login-error');
-  if(pw===adminPw){isLoggedIn=true;isAdmin=true;document.getElementById('login-overlay').classList.add('hidden');applyAdminUI();initFirestore();toast('관리자 모드로 로그인되었습니다 🛡️','success');}
-  else if(pw===userPw){isLoggedIn=true;isAdmin=false;document.getElementById('login-overlay').classList.add('hidden');applyAdminUI();initFirestore();toast('일반 모드로 로그인되었습니다 👋','info');}
+  if(pw===adminPw){isLoggedIn=true;isAdmin=true;document.getElementById('login-overlay').classList.add('hidden');applyAdminUI();initDatabase();toast('관리자 모드로 로그인되었습니다 🛡️','success');}
+  else if(pw===userPw){isLoggedIn=true;isAdmin=false;document.getElementById('login-overlay').classList.add('hidden');applyAdminUI();initDatabase();toast('일반 모드로 로그인되었습니다 👋','info');}
   else{err.style.display='block';document.getElementById('login-pw-input').select();}
 }
 
@@ -321,22 +326,20 @@ async function saveMember(){
     updatedAt:new Date().toISOString()};
   try{
     if(useLocalOnly){
-      // Firestore 없을 때 로컬에만 저장
       const idx=members.findIndex(x=>x.id===memberId);
       if(idx>=0)members[idx]={id:memberId,...data};else members.push({id:memberId,...data});
       saveCache();render();updateCount();
       toast(editingId?'수정되었습니다 ✅':'등록되었습니다 ✅','success');
     }else{
-      await db.collection('members').doc(memberId).set(data);
+      await database.ref('members/'+memberId).set({...data,id:memberId});
       toast(editingId?'수정되었습니다 ✅':'등록되었습니다 ✅','success');
     }
     document.getElementById('modal-overlay').style.display='none';
   }catch(e){
-    // Firestore 실패 시 로컈로 fallback
     const idx=members.findIndex(x=>x.id===memberId);
     if(idx>=0)members[idx]={id:memberId,...data};else members.push({id:memberId,...data});
     saveCache();render();updateCount();
-    toast('로컈에 임시저장 (파이어베이스 오류: '+e.code+')','error');
+    toast('로컬에 임시저장 (오류: '+e.code+')','error');
     document.getElementById('modal-overlay').style.display='none';
   }
 }
@@ -352,16 +355,15 @@ async function delMember(id){
     return;
   }
   try{
-    await db.collection('members').doc(id).delete();
+    await database.ref('members/'+id).remove();
     try{storage.ref('photos/'+id).delete();}catch(e){}
     document.getElementById('detail-overlay').style.display='none';
     toast('삭제되었습니다','info');
   }catch(e){
-    // Firestore 실패 시 로컈에서만 삭제
     members=members.filter(m=>m.id!==id);
     saveCache();render();
     document.getElementById('detail-overlay').style.display='none';
-    toast('로컈에서 삭제 (파이어베이스 오류: '+e.code+')','error');
+    toast('로컬에서 삭제 (오류: '+e.code+')','error');
   }
 }
 
@@ -400,19 +402,20 @@ function importExcel(file){
     try{
       const wb=XLSX.read(e.target.result,{type:'array'});
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-      const batch=db.batch();let n=0;
+      const updates={};
       rows.forEach(r=>{
         const name=r['이름']||r['name']||'';if(!name)return;
         const id=Date.now().toString()+Math.random();
-        batch.set(db.collection('members').doc(id),{
+        updates[id]={
+          id,
           name:String(name).trim(),gender:String(r['성별']||'').trim(),
           phone:String(r['전화번호']||r['phone']||'').trim(),email:String(r['이메일']||'').trim(),
           job:String(r['직업']||'').trim(),company:String(r['소속']||'').trim(),
           birthday:String(r['생년월일']||'').trim(),joindate:String(r['가입일']||'').trim(),
-          address:String(r['주소']||'').trim(),memo:String(r['메모']||'').trim(),photo:''});
+          address:String(r['주소']||'').trim(),memo:String(r['메모']||'').trim(),photo:''};
         n++;
       });
-      await batch.commit();
+      await database.ref('members').update(updates);
       toast(`${n}명 가져오기 완료 📤`,'success');
     }catch(err){toast('파일 읽기 오류: '+err.message,'error');}
   };reader.readAsArrayBuffer(file);
