@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>회원관리 명부</title>
+  <meta name="description" content="회원 사진, 이름, 직업, 전화번호 등을 관리하는 스마트 회원명부 시스템" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ===== SIDEBAR ===== -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="logo-area" id="logo-area">
+      <div class="logo-img-wrap" id="logo-img-wrap">
+        <img id="logo-img" src="" alt="로고" style="display:none;" />
+        <span class="logo-img-placeholder" id="logo-placeholder">🏢</span>
+        <label class="logo-edit-btn" id="logo-img-edit-btn" for="logo-img-input" title="로고 사진 변경" style="display:none;">📷</label>
+        <input type="file" id="logo-img-input" accept="image/*" style="display:none;" />
+      </div>
+      <div class="logo-text-wrap">
+        <div class="logo-title-row">
+          <span class="logo-title" id="logo-title">회원명부</span>
+          <button class="logo-name-edit-btn" id="logo-name-edit-btn" title="이름 변경" style="display:none;">✏️</button>
+        </div>
+        <span class="logo-sub">Member Directory</span>
+      </div>
+    </div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <a href="#" class="nav-item active" data-view="list" id="nav-list">
+      <span class="nav-icon">📋</span><span>전체 회원</span>
+    </a>
+    <a href="#" class="nav-item" data-view="card" id="nav-card">
+      <span class="nav-icon">🗂️</span><span>카드 보기</span>
+    </a>
+    <a href="#" class="nav-item" data-view="stats" id="nav-stats">
+      <span class="nav-icon">📊</span><span>통계</span>
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="member-count-badge">
+      <span class="count-num" id="sidebar-count">0</span>
+      <span class="count-label">명의 회원</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ===== MAIN ===== -->
+<main class="main-content">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="btn-icon" id="btn-menu">☰</button>
+      <h1 class="page-title" id="page-title">전체 회원</h1>
+    </div>
+    <div class="topbar-right">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" class="search-input" placeholder="이름, 직업, 전화번호 검색..." />
+        <button class="search-clear" id="search-clear">✕</button>
+      </div>
+      <!-- 관리자 전용 -->
+      <div class="admin-only-btns" id="admin-only-btns" style="display:none;">
+        <button class="btn-secondary" id="btn-export">📥 엑셀 다운로드</button>
+        <label class="btn-secondary" for="excel-upload" style="cursor:pointer;">📤 엑셀 업로드</label>
+        <input type="file" id="excel-upload" accept=".xlsx,.xls,.csv" style="display:none;" />
+        <button class="btn-primary" id="btn-add">＋ 회원 등록</button>
+      </div>
+      <!-- 관리자 모드 표시 -->
+      <div class="mode-badge" id="mode-badge">
+        <span class="mode-dot"></span>
+        <span id="mode-label">일반 모드</span>
+      </div>
+      <!-- 톱니바퀴 -->
+      <button class="btn-icon admin-gear" id="btn-admin-gear" title="관리자 설정">⚙️</button>
+    </div>
+  </header>
+
+  <!-- FILTER BAR -->
+  <div class="filter-bar">
+    <div class="filter-chips" id="filter-chips">
+      <button class="chip active" data-filter="all">전체</button>
+    </div>
+    <div class="view-toggle">
+      <button class="view-btn active" id="view-list-btn" title="목록 보기">☰</button>
+      <button class="view-btn" id="view-grid-btn" title="카드 보기">⊞</button>
+    </div>
+  </div>
+
+  <!-- LIST VIEW -->
+  <section class="content-area" id="view-list-section">
+    <div class="table-wrap">
+      <table class="member-table" id="member-table">
+        <thead>
+          <tr>
+            <th class="th-photo">사진</th>
+            <th class="th-name sortable" data-col="name">이름 <span class="sort-icon">↕</span></th>
+            <th class="th-job sortable" data-col="job">직업 <span class="sort-icon">↕</span></th>
+            <th class="th-phone">전화번호</th>
+            <th class="th-email">이메일</th>
+            <th class="th-birthday sortable" data-col="birthday">생년월일 <span class="sort-icon">↕</span></th>
+            <th class="th-memo">메모</th>
+            <th class="th-actions admin-col" id="th-actions">관리</th>
+          </tr>
+        </thead>
+        <tbody id="member-tbody"></tbody>
+      </table>
+      <div class="empty-state" id="empty-state" style="display:none;">
+        <div class="empty-icon">👥</div>
+        <div class="empty-title">등록된 회원이 없습니다</div>
+        <div class="empty-sub">관리자 로그인 후 회원을 추가하세요</div>
+        <button class="btn-primary admin-show" id="btn-add-empty" style="display:none;">＋ 회원 등록</button>
+      </div>
+    </div>
+    <div class="pagination" id="pagination"></div>
+  </section>
+
+  <!-- CARD VIEW -->
+  <section class="content-area" id="view-card-section" style="display:none;">
+    <div class="card-grid" id="card-grid"></div>
+    <div class="pagination" id="pagination-card"></div>
+  </section>
+
+  <!-- STATS VIEW -->
+  <section class="content-area" id="view-stats-section" style="display:none;">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#ede9fe;">👥</div>
+        <div class="stat-info"><div class="stat-num" id="stat-total">0</div><div class="stat-label">전체 회원</div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#fef3c7;">🎂</div>
+        <div class="stat-info"><div class="stat-num" id="stat-birthday">0</div><div class="stat-label">이번 달 생일</div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#dcfce7;">💼</div>
+        <div class="stat-info"><div class="stat-num" id="stat-jobs">0</div><div class="stat-label">직종 종류</div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#dbeafe;">📸</div>
+        <div class="stat-info"><div class="stat-num" id="stat-photos">0</div><div class="stat-label">사진 등록</div></div>
+      </div>
+    </div>
+    <div class="stats-charts">
+      <div class="chart-card">
+        <h3 class="chart-title">직업별 분포</h3>
+        <div class="bar-chart" id="job-chart"></div>
+      </div>
+      <div class="chart-card">
+        <h3 class="chart-title">🎂 이번 달 생일</h3>
+        <div class="birthday-list" id="birthday-list"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ===== MODAL: 관리자 패널 ===== -->
+<div class="modal-overlay" id="admin-overlay" style="display:none;">
+  <div class="modal modal-sm" id="admin-modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="admin-modal-title">⚙️ 관리자</h2>
+      <button class="modal-close" id="admin-modal-close">✕</button>
+    </div>
+    <!-- 비밀번호 입력 화면 -->
+    <div id="admin-login-panel">
+      <div class="modal-body" style="flex-direction:column;gap:16px;">
+        <p class="form-label" style="font-size:0.9rem;color:var(--text2);">관리자 비밀번호를 입력하세요</p>
+        <div class="form-group" style="margin:0;">
+          <input type="password" id="admin-pw-input" class="form-input" placeholder="비밀번호" maxlength="30" />
+        </div>
+        <div class="pw-error" id="pw-error" style="display:none;color:var(--red);font-size:0.82rem;">비밀번호가 올바르지 않습니다</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" id="admin-login-cancel">취소</button>
+        <button class="btn-primary" id="admin-login-btn">🔓 로그인</button>
+      </div>
+    </div>
+    <!-- 관리자 메뉴 화면 -->
+    <div id="admin-menu-panel" style="display:none;">
+      <div class="modal-body" style="flex-direction:column;gap:10px;">
+        <div class="admin-menu-item" id="btn-change-user-pw">
+          <span>🔑</span><span>일반 비밀번호 변경</span><span class="arrow">›</span>
+        </div>
+        <div class="admin-menu-item" id="btn-change-admin-pw">
+          <span>🛡️</span><span>관리자 비밀번호 변경</span><span class="arrow">›</span>
+        </div>
+        <div class="admin-menu-item" id="btn-downgrade-admin">
+          <span>🔒</span><span>일반 모드로 전환</span><span class="arrow">›</span>
+        </div>
+        <div class="admin-menu-item danger" id="btn-logout-all">
+          <span>🚪</span><span>로그아웃</span><span class="arrow">›</span>
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content:center;">
+        <button class="btn-ghost" id="admin-menu-close">닫기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: 비밀번호 변경 ===== -->
+<div class="modal-overlay" id="changepw-overlay" style="display:none;">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2 class="modal-title" id="changepw-title">🔑 비밀번호 변경</h2>
+      <button class="modal-close" id="changepw-close">✕</button>
+    </div>
+    <div class="modal-body" style="flex-direction:column;gap:14px;">
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">새 비밀번호</label>
+        <input type="password" id="new-pw" class="form-input" placeholder="새 비밀번호" maxlength="30" />
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">새 비밀번호 확인</label>
+        <input type="password" id="new-pw2" class="form-input" placeholder="새 비밀번호 확인" maxlength="30" />
+      </div>
+      <div id="changepw-error" style="display:none;color:var(--red);font-size:0.82rem;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" id="changepw-cancel">취소</button>
+      <button class="btn-primary" id="changepw-save">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: 로고 이름 변경 ===== -->
+<div class="modal-overlay" id="logoname-overlay" style="display:none;">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2 class="modal-title">✏️ 로고 이름 변경</h2>
+      <button class="modal-close" id="logoname-close">✕</button>
+    </div>
+    <div class="modal-body" style="flex-direction:column;gap:14px;">
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">표시 이름</label>
+        <input type="text" id="logoname-input" class="form-input" placeholder="회원명부" maxlength="20" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" id="logoname-cancel">취소</button>
+      <button class="btn-primary" id="logoname-save">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: 회원 등록/수정 ===== -->
+<div class="modal-overlay" id="modal-overlay" style="display:none;">
+  <div class="modal" id="member-modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="modal-title">회원 등록</h2>
+      <button class="modal-close" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-photo-section">
+        <div class="photo-upload-wrap">
+          <div class="photo-preview" id="photo-preview">
+            <span class="photo-placeholder">👤</span>
+          </div>
+          <div class="photo-upload-btns">
+            <label class="btn-sm btn-outline" for="photo-input">📷 사진 선택</label>
+            <input type="file" id="photo-input" accept="image/*" style="display:none;" />
+            <button class="btn-sm btn-ghost-sm" id="photo-remove">🗑️ 제거</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label required">이름</label>
+            <input type="text" id="field-name" class="form-input" placeholder="홍길동" maxlength="50" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">성별</label>
+            <select id="field-gender" class="form-input">
+              <option value="">선택</option>
+              <option value="남">남</option>
+              <option value="여">여</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label required">전화번호</label>
+            <input type="tel" id="field-phone" class="form-input" placeholder="010-0000-0000" maxlength="20" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">이메일</label>
+            <input type="email" id="field-email" class="form-input" placeholder="example@email.com" maxlength="100" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">직업</label>
+            <input type="text" id="field-job" class="form-input" placeholder="직업" maxlength="50" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">소속/회사</label>
+            <input type="text" id="field-company" class="form-input" placeholder="회사명" maxlength="100" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">생년월일</label>
+            <input type="date" id="field-birthday" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">가입일</label>
+            <input type="date" id="field-joindate" class="form-input" />
+          </div>
+        </div>
+        <div class="form-group form-group-full">
+          <label class="form-label">주소</label>
+          <input type="text" id="field-address" class="form-input" placeholder="주소" maxlength="200" />
+        </div>
+        <div class="form-group form-group-full">
+          <label class="form-label">메모</label>
+          <textarea id="field-memo" class="form-textarea" placeholder="추가 메모" rows="3" maxlength="500"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" id="btn-cancel">취소</button>
+      <button class="btn-primary" id="btn-save">💾 저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: 회원 상세 ===== -->
+<div class="modal-overlay" id="detail-overlay" style="display:none;">
+  <div class="modal modal-detail" id="detail-modal">
+    <div class="modal-header">
+      <h2 class="modal-title">회원 정보</h2>
+      <button class="modal-close" id="detail-close">✕</button>
+    </div>
+    <div class="detail-body" id="detail-body"></div>
+    <div class="modal-footer">
+      <button class="btn-danger admin-show" id="btn-detail-delete" style="display:none;margin-right:auto;">🗑️ 삭제</button>
+      <button class="btn-ghost" id="detail-dismiss">닫기</button>
+      <button class="btn-primary admin-show" id="btn-detail-edit" style="display:none;">✏️ 수정</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== LOGIN OVERLAY ===== -->
+<div class="login-overlay" id="login-overlay">
+  <div class="login-card">
+    <div class="login-logo-wrap" id="login-logo-wrap">
+      <span class="login-logo-icon" id="login-logo-icon">🏢</span>
+    </div>
+    <h1 class="login-title" id="login-title-text">회원명부</h1>
+    <p class="login-sub">비밀번호를 입력하여 접속하세요</p>
+    <div class="login-form">
+      <div class="form-group" style="margin:0;">
+        <input type="password" id="login-pw-input" class="form-input login-input" placeholder="비밀번호 입력" maxlength="30" autocomplete="current-password" />
+      </div>
+      <div id="login-error" style="display:none;color:var(--red);font-size:0.82rem;text-align:center;">비밀번호가 올바르지 않습니다</div>
+      <button class="btn-primary login-btn" id="login-btn">🔓 로그인</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<script src="firebase.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,488 @@
+// STATE
+let members = [];
+let isLoggedIn=false, isAdmin=false;
+let userPw=localStorage.getItem('userPw')||'1234';
+let adminPw=localStorage.getItem('adminPw')||'5678';
+let logoName=localStorage.getItem('logoName')||'회원명부';
+let logoImg=localStorage.getItem('logoImg')||'';
+let currentView='list',sortCol='',sortDir=1,searchQ='',filterJob='all';
+let currentPage=1,cardPage=1,editingId=null,detailId=null;
+let changingPwTarget='user';
+let fsUnsub=null,migrationChecked=false;
+const PER=15,CPER=12;
+
+// FIRESTORE
+function initFirestore(){
+  if(fsUnsub)fsUnsub();
+  fsUnsub=db.collection('members').onSnapshot(snap=>{
+    members=snap.docs.map(d=>({id:d.id,...d.data()}));
+    render();updateCount();
+    if(!migrationChecked){migrationChecked=true;checkMigration();}
+  },err=>toast('데이터 로드 실패: '+err.message,'error'));
+}
+function checkMigration(){
+  const loc=JSON.parse(localStorage.getItem('members')||'[]');
+  if(loc.length&&!members.length){
+    if(confirm(`로컬 데이터 ${loc.length}명을 클라우드로 마이그레이션할까요?`))migrateData(loc);
+  }
+}
+async function migrateData(loc){
+  try{
+    const batch=db.batch();
+    for(const m of loc){
+      let photo=m.photo||'';
+      if(photo.startsWith('data:')){
+        const r=storage.ref('photos/'+(m.id||Date.now()));
+        await r.putString(photo,'data_url');photo=await r.getDownloadURL();
+      }
+      batch.set(db.collection('members').doc(m.id||Date.now().toString()),{...m,photo});
+    }
+    await batch.commit();
+    localStorage.removeItem('members');
+    toast(`${loc.length}명 마이그레이션 완료 ✅`,'success');
+  }catch(e){toast('마이그레이션 실패: '+e.message,'error');}
+}
+
+// (Firestore handles persistence)
+function updateCount(){document.getElementById('sidebar-count').textContent=members.length;}
+
+// FILTER
+function filtered(){
+  let a=[...members];
+  if(searchQ){const q=searchQ.toLowerCase();a=a.filter(m=>(m.name||'').toLowerCase().includes(q)||(m.job||'').toLowerCase().includes(q)||(m.phone||'').toLowerCase().includes(q)||(m.email||'').toLowerCase().includes(q));}
+  if(filterJob!=='all')a=a.filter(m=>(m.job||'기타')===filterJob);
+  if(sortCol)a.sort((a,b)=>{const va=(a[sortCol]||'').toLowerCase(),vb=(b[sortCol]||'').toLowerCase();return va<vb?-sortDir:va>vb?sortDir:0;});
+  return a;
+}
+function page(arr,p,per){return arr.slice((p-1)*per,p*per);}
+
+// RENDER LIST
+function renderList(){
+  const arr=filtered();
+  const tbody=document.getElementById('member-tbody');
+  const empty=document.getElementById('empty-state');
+  const tbl=document.querySelector('.member-table');
+  if(!arr.length){tbody.innerHTML='';empty.style.display='flex';tbl.style.display='none';document.getElementById('pagination').innerHTML='';return;}
+  empty.style.display='none';tbl.style.display='';
+  tbody.innerHTML=page(arr,currentPage,PER).map(m=>`
+    <tr data-id="${m.id}" onclick="openDetail('${m.id}')">
+      <td>${m.photo?`<img class="table-photo" src="${m.photo}"/>`:`<div class="table-photo-placeholder">👤</div>`}</td>
+      <td><span class="name-cell">${esc(m.name)}</span></td>
+      <td>${esc(m.job||'-')}</td>
+      <td><span class="phone-cell">${esc(m.phone||'-')}</span></td>
+      <td><span class="email-cell">${esc(m.email||'-')}</span></td>
+      <td>${m.birthday?fmtDate(m.birthday):'-'}</td>
+      <td><span class="memo-cell">${esc(m.memo||'-')}</span></td>
+      <td onclick="event.stopPropagation()">
+        ${isAdmin?`<div class="action-btns"><button class="action-btn edit" onclick="openEdit('${m.id}')">✏️</button><button class="action-btn del" onclick="delMember('${m.id}')">🗑️</button></div>`:''}
+      </td>
+    </tr>`).join('');
+  renderPagi(arr.length,currentPage,PER,document.getElementById('pagination'),p=>{currentPage=p;renderList();});
+}
+
+// RENDER CARDS
+function renderCards(){
+  const arr=filtered();
+  const grid=document.getElementById('card-grid');
+  const m2=new Date().getMonth()+1;
+  if(!arr.length){grid.innerHTML='<div class="empty-state" style="display:flex"><div class="empty-icon">👥</div><div class="empty-title">회원이 없습니다</div></div>';document.getElementById('pagination-card').innerHTML='';return;}
+  grid.innerHTML=page(arr,cardPage,CPER).map(m=>{
+    const bd=m.birthday&&parseInt(m.birthday.split('-')[1])===m2;
+    return `<div class="member-card" onclick="openDetail('${m.id}')">
+      ${bd?'<div class="card-badge">🎂 이번달 생일</div>':''}
+      ${m.photo?`<img class="card-photo" src="${m.photo}"/>`:`<div class="card-photo-placeholder">👤</div>`}
+      <div class="card-name">${esc(m.name)}</div>
+      <div class="card-job">${esc(m.job||'-')}</div>
+      <div class="card-phone">${esc(m.phone||'-')}</div>
+      ${isAdmin?`<div class="card-actions" onclick="event.stopPropagation()"><button class="action-btn edit" onclick="openEdit('${m.id}')">✏️</button><button class="action-btn del" onclick="delMember('${m.id}')">🗑️</button></div>`:''}
+    </div>`;
+  }).join('');
+  renderPagi(arr.length,cardPage,CPER,document.getElementById('pagination-card'),p=>{cardPage=p;renderCards();});
+}
+
+// RENDER STATS
+function renderStats(){
+  const m2=new Date().getMonth()+1;
+  document.getElementById('stat-total').textContent=members.length;
+  document.getElementById('stat-birthday').textContent=members.filter(m=>m.birthday&&parseInt(m.birthday.split('-')[1])===m2).length;
+  const jobs=[...new Set(members.map(m=>m.job||'').filter(Boolean))];
+  document.getElementById('stat-jobs').textContent=jobs.length;
+  document.getElementById('stat-photos').textContent=members.filter(m=>m.photo).length;
+  const jc={};members.forEach(m=>{const j=m.job||'기타';jc[j]=(jc[j]||0)+1;});
+  const sorted=Object.entries(jc).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const mx=sorted[0]?.[1]||1;
+  document.getElementById('job-chart').innerHTML=sorted.length?sorted.map(([j,c])=>`<div class="bar-row"><span class="bar-label" title="${esc(j)}">${esc(j)}</span><div class="bar-track"><div class="bar-fill" style="width:${(c/mx*100).toFixed(1)}%"></div></div><span class="bar-count">${c}</span></div>`).join(''):'<div class="no-birthday">데이터 없음</div>';
+  const bds=members.filter(m=>m.birthday&&parseInt(m.birthday.split('-')[1])===m2).sort((a,b)=>a.birthday.split('-')[2]-b.birthday.split('-')[2]);
+  document.getElementById('birthday-list').innerHTML=bds.length?bds.map(m=>`<div class="birthday-row"><span class="birthday-name">🎂 ${esc(m.name)}</span><span class="birthday-date">${m.birthday.split('-')[1]}월 ${m.birthday.split('-')[2]}일</span></div>`).join(''):'<div class="no-birthday">이번 달 생일인 회원이 없습니다</div>';
+}
+
+// PAGINATION
+function renderPagi(total,cur,per,el,cb){
+  const pages=Math.ceil(total/per);
+  if(pages<=1){el.innerHTML='';return;}
+  let h='';
+  if(cur>1)h+=`<button class="page-btn" onclick="(${cb})(${cur-1})">‹</button>`;
+  for(let i=1;i<=pages;i++){
+    if(i===1||i===pages||Math.abs(i-cur)<=2)h+=`<button class="page-btn${i===cur?' active':''}" onclick="(${cb})(${i})">${i}</button>`;
+    else if(Math.abs(i-cur)===3)h+=`<span style="color:var(--text3);padding:0 3px">…</span>`;
+  }
+  if(cur<pages)h+=`<button class="page-btn" onclick="(${cb})(${cur+1})">›</button>`;
+  el.innerHTML=h;
+}
+
+// CHIPS
+function buildChips(){
+  const jobs=[...new Set(members.map(m=>m.job||'').filter(Boolean))].sort();
+  const el=document.getElementById('filter-chips');
+  el.innerHTML=`<button class="chip${filterJob==='all'?' active':''}" data-filter="all">전체</button>`+jobs.map(j=>`<button class="chip${filterJob===j?' active':''}" data-filter="${esc(j)}">${esc(j)}</button>`).join('');
+  el.querySelectorAll('.chip').forEach(btn=>btn.addEventListener('click',()=>{filterJob=btn.dataset.filter;currentPage=1;cardPage=1;buildChips();render();}));
+}
+
+// RENDER
+function render(){
+  buildChips();
+  if(currentView==='list')renderList();
+  else if(currentView==='card')renderCards();
+  else renderStats();
+  updateCount();
+}
+
+// ADMIN MODE UI
+function applyAdminUI(){
+  const adminBtns=document.getElementById('admin-only-btns');
+  adminBtns.style.display=isAdmin?'flex':'none';
+  adminBtns.style.visibility=isAdmin?'visible':'hidden';
+
+  const badge=document.getElementById('mode-badge');
+  badge.className='mode-badge'+(isAdmin?' admin':'');
+  document.getElementById('mode-label').textContent=isAdmin?'관리자 모드':'일반 모드';
+
+  const detDel=document.getElementById('btn-detail-delete');
+  const detEdit=document.getElementById('btn-detail-edit');
+  detDel.style.display=isAdmin?'inline-flex':'none';
+  detEdit.style.display=isAdmin?'inline-flex':'none';
+
+  document.getElementById('logo-img-edit-btn').style.display=isAdmin?'flex':'none';
+  document.getElementById('logo-name-edit-btn').style.display=isAdmin?'inline-flex':'none';
+
+  const thAct=document.getElementById('th-actions');
+  thAct.style.display=isAdmin?'table-cell':'none';
+
+  render();
+}
+
+// LOGIN
+function showLogin(){
+  isLoggedIn=false; isAdmin=false;
+  const ov=document.getElementById('login-overlay');
+  ov.classList.remove('hidden');
+  document.getElementById('login-pw-input').value='';
+  document.getElementById('login-error').style.display='none';
+  // sync login logo with app logo
+  const li=document.getElementById('login-logo-icon');
+  const liw=document.getElementById('login-logo-wrap');
+  if(logoImg){liw.innerHTML=`<img src="${logoImg}" style="width:100%;height:100%;object-fit:cover;"/>`}
+  else{liw.innerHTML=`<span class="login-logo-icon">🏢</span>`;}
+  document.getElementById('login-title-text').textContent=logoName;
+}
+function doLogin(){
+  const pw=document.getElementById('login-pw-input').value;
+  const err=document.getElementById('login-error');
+  if(pw===adminPw){isLoggedIn=true;isAdmin=true;document.getElementById('login-overlay').classList.add('hidden');applyAdminUI();initFirestore();toast('관리자 모드로 로그인되었습니다 🛡️','success');}
+  else if(pw===userPw){isLoggedIn=true;isAdmin=false;document.getElementById('login-overlay').classList.add('hidden');applyAdminUI();initFirestore();toast('일반 모드로 로그인되었습니다 👋','info');}
+  else{err.style.display='block';document.getElementById('login-pw-input').select();}
+}
+
+// DETAIL
+function openDetail(id){
+  detailId=id;
+  const m=members.find(x=>x.id===id);if(!m)return;
+  document.getElementById('detail-body').innerHTML=`
+    <div class="detail-header">
+      ${m.photo?`<img class="detail-photo" src="${m.photo}"/>`:`<div class="detail-photo-placeholder">👤</div>`}
+      <div><div class="detail-name">${esc(m.name)}</div><div class="detail-job">${esc(m.job||'')}${m.company?' · '+esc(m.company):''}</div></div>
+    </div>
+    <div class="detail-fields">
+      ${df('📞','전화번호',m.phone)}${df('📧','이메일',m.email)}${df('⚧','성별',m.gender)}${df('🎂','생년월일',m.birthday?fmtDate(m.birthday):'')}${df('📅','가입일',m.joindate?fmtDate(m.joindate):'')}${df('📍','주소',m.address)}${df('📝','메모',m.memo)}
+    </div>`;
+  document.getElementById('btn-detail-delete').style.display=isAdmin?'inline-flex':'none';
+  document.getElementById('btn-detail-edit').style.display=isAdmin?'inline-flex':'none';
+  document.getElementById('detail-overlay').style.display='flex';
+}
+function df(icon,label,val){
+  if(!val)return'';
+  return`<div class="detail-field"><span class="detail-field-icon">${icon}</span><div><div class="detail-field-label">${label}</div><div class="detail-field-value">${esc(val)}</div></div></div>`;
+}
+
+// ADD/EDIT
+function openAdd(){editingId=null;document.getElementById('modal-title').textContent='회원 등록';clearForm();document.getElementById('field-joindate').value=new Date().toISOString().split('T')[0];document.getElementById('modal-overlay').style.display='flex';}
+function openEdit(id){
+  editingId=id;const m=members.find(x=>x.id===id);if(!m)return;
+  document.getElementById('modal-title').textContent='회원 수정';
+  ['name','gender','phone','email','job','company','birthday','joindate','address','memo'].forEach(f=>{const el=document.getElementById('field-'+f);if(el)el.value=m[f]||'';});
+  const prev=document.getElementById('photo-preview');
+  prev.innerHTML=m.photo?`<img src="${m.photo}" style="width:100%;height:100%;object-fit:cover"/>`:'<span class="photo-placeholder">👤</span>';
+  document.getElementById('modal-overlay').style.display='flex';
+  document.getElementById('detail-overlay').style.display='none';
+}
+function clearForm(){
+  ['name','gender','phone','email','job','company','birthday','joindate','address','memo'].forEach(f=>{const el=document.getElementById('field-'+f);if(el)el.value='';});
+  document.getElementById('photo-preview').innerHTML='<span class="photo-placeholder">👤</span>';
+}
+async function saveMember(){
+  const name=document.getElementById('field-name').value.trim();
+  const phone=document.getElementById('field-phone').value.trim();
+  if(!name){toast('이름을 입력해주세요','error');return;}
+  if(!phone){toast('전화번호를 입력해주세요','error');return;}
+  const memberId=editingId||Date.now().toString();
+  const img=document.getElementById('photo-preview').querySelector('img');
+  let photo=img?img.src:'';
+  if(photo.startsWith('data:')){
+    try{
+      const r=storage.ref('photos/'+memberId);
+      await r.putString(photo,'data_url');photo=await r.getDownloadURL();
+    }catch(e){photo='';}
+  }
+  const data={name,phone,photo,
+    gender:document.getElementById('field-gender').value,
+    email:document.getElementById('field-email').value.trim(),
+    job:document.getElementById('field-job').value.trim(),
+    company:document.getElementById('field-company').value.trim(),
+    birthday:document.getElementById('field-birthday').value,
+    joindate:document.getElementById('field-joindate').value,
+    address:document.getElementById('field-address').value.trim(),
+    memo:document.getElementById('field-memo').value.trim(),
+    updatedAt:new Date().toISOString()};
+  try{
+    await db.collection('members').doc(memberId).set(data);
+    toast(editingId?'수정되었습니다 ✅':'등록되었습니다 ✅','success');
+    document.getElementById('modal-overlay').style.display='none';
+  }catch(e){toast('저장 실패: '+e.message,'error');}
+}
+
+// DELETE
+async function delMember(id){
+  if(!confirm('이 회원을 삭제하시겠습니까?'))return;
+  try{
+    try{await storage.ref('photos/'+id).delete();}catch(e){}
+    await db.collection('members').doc(id).delete();
+    document.getElementById('detail-overlay').style.display='none';
+    toast('삭제되었습니다','info');
+  }catch(e){toast('삭제 실패: '+e.message,'error');}
+}
+
+// EXCEL
+function exportExcel(){
+  if(!members.length){toast('내보낼 회원이 없습니다','error');return;}
+  const ws=XLSX.utils.json_to_sheet(members.map(m=>({이름:m.name,성별:m.gender,전화번호:m.phone,이메일:m.email,직업:m.job,소속:m.company,생년월일:m.birthday,가입일:m.joindate,주소:m.address,메모:m.memo})));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'회원명부');
+  XLSX.writeFile(wb,`회원명부_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('엑셀 다운로드 완료 📥','success');
+}
+function importExcel(file){
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+      const batch=db.batch();let n=0;
+      rows.forEach(r=>{
+        const name=r['이름']||r['name']||'';if(!name)return;
+        const id=Date.now().toString()+Math.random();
+        batch.set(db.collection('members').doc(id),{
+          name:String(name).trim(),gender:String(r['성별']||'').trim(),
+          phone:String(r['전화번호']||r['phone']||'').trim(),email:String(r['이메일']||'').trim(),
+          job:String(r['직업']||'').trim(),company:String(r['소속']||'').trim(),
+          birthday:String(r['생년월일']||'').trim(),joindate:String(r['가입일']||'').trim(),
+          address:String(r['주소']||'').trim(),memo:String(r['메모']||'').trim(),photo:''});
+        n++;
+      });
+      await batch.commit();
+      toast(`${n}명 가져오기 완료 📤`,'success');
+    }catch(err){toast('파일 읽기 오류: '+err.message,'error');}
+  };reader.readAsArrayBuffer(file);
+}
+
+// LOGO
+function applyLogo(){
+  document.getElementById('logo-title').textContent=logoName;
+  const img=document.getElementById('logo-img');
+  const ph=document.getElementById('logo-placeholder');
+  if(logoImg){img.src=logoImg;img.style.display='';ph.style.display='none';}
+  else{img.style.display='none';ph.style.display='';}
+}
+
+// TOAST
+function toast(msg,type='info'){
+  const el=document.createElement('div');
+  el.className=`toast ${type}`;
+  const icons={success:'✅',error:'❌',info:'ℹ️'};
+  el.innerHTML=`<span>${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>el.remove(),3000);
+}
+
+// HELPERS
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmtDate(d){if(!d)return'';const p=d.split('-');return p.length===3?`${p[0]}년 ${p[1]}월 ${p[2]}일`:d;}
+
+// VIEW SWITCH
+function switchView(view){
+  currentView=view;
+  ['list','card','stats'].forEach(v=>{
+    document.getElementById(`view-${v}-section`).style.display=v===view?'':'none';
+    const n=document.getElementById(`nav-${v}`);if(n)n.classList.toggle('active',v===view);
+  });
+  const titles={list:'전체 회원',card:'카드 보기',stats:'통계'};
+  document.getElementById('page-title').textContent=titles[view]||'';
+  if(view==='stats')renderStats();else render();
+}
+
+// ===== EVENTS =====
+// Login
+document.getElementById('login-btn').addEventListener('click', doLogin);
+document.getElementById('login-pw-input').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+
+// Admin gear
+document.getElementById('btn-admin-gear').addEventListener('click',()=>{
+  if(!isLoggedIn){showLogin();return;}
+  if(isAdmin){
+    document.getElementById('admin-login-panel').style.display='none';
+    document.getElementById('admin-menu-panel').style.display='';
+    document.getElementById('admin-modal-title').textContent='⚙️ 관리자 메뉴';
+  }else{
+    document.getElementById('admin-login-panel').style.display='';
+    document.getElementById('admin-menu-panel').style.display='none';
+    document.getElementById('admin-modal-title').textContent='⚙️ 관리자 로그인';
+    document.getElementById('admin-pw-input').value='';
+    document.getElementById('pw-error').style.display='none';
+  }
+  document.getElementById('admin-overlay').style.display='flex';
+});
+document.getElementById('admin-modal-close').addEventListener('click',()=>document.getElementById('admin-overlay').style.display='none');
+document.getElementById('admin-login-cancel').addEventListener('click',()=>document.getElementById('admin-overlay').style.display='none');
+document.getElementById('admin-overlay').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.style.display='none';});
+
+document.getElementById('admin-login-btn').addEventListener('click',()=>{
+  const pw=document.getElementById('admin-pw-input').value;
+  if(pw===adminPw){isAdmin=true;document.getElementById('admin-overlay').style.display='none';applyAdminUI();toast('관리자 모드 활성화','success');}
+  else{document.getElementById('pw-error').style.display='block';}
+});
+document.getElementById('admin-pw-input').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('admin-login-btn').click();});
+
+// Admin menu items
+document.getElementById('btn-downgrade-admin').addEventListener('click',()=>{
+  isAdmin=false;document.getElementById('admin-overlay').style.display='none';applyAdminUI();toast('일반 모드로 전환되었습니다','정보');
+});
+document.getElementById('btn-logout-all').addEventListener('click',()=>{
+  document.getElementById('admin-overlay').style.display='none';
+  showLogin();
+  toast('로그아웃되었습니다','info');
+});
+document.getElementById('admin-menu-close').addEventListener('click',()=>document.getElementById('admin-overlay').style.display='none');
+
+// Change PW (user)
+document.getElementById('btn-change-user-pw').addEventListener('click',()=>{
+  changingPwTarget='user';
+  document.getElementById('changepw-title').textContent='🔑 일반 비밀번호 변경';
+  document.getElementById('new-pw').value='';document.getElementById('new-pw2').value='';
+  document.getElementById('changepw-error').style.display='none';
+  document.getElementById('admin-overlay').style.display='none';
+  document.getElementById('changepw-overlay').style.display='flex';
+});
+// Change PW (admin)
+document.getElementById('btn-change-admin-pw').addEventListener('click',()=>{
+  changingPwTarget='admin';
+  document.getElementById('changepw-title').textContent='🛡️ 관리자 비밀번호 변경';
+  document.getElementById('new-pw').value='';document.getElementById('new-pw2').value='';
+  document.getElementById('changepw-error').style.display='none';
+  document.getElementById('admin-overlay').style.display='none';
+  document.getElementById('changepw-overlay').style.display='flex';
+});
+document.getElementById('changepw-close').addEventListener('click',()=>document.getElementById('changepw-overlay').style.display='none');
+document.getElementById('changepw-cancel').addEventListener('click',()=>document.getElementById('changepw-overlay').style.display='none');
+document.getElementById('changepw-overlay').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.style.display='none';});
+document.getElementById('changepw-save').addEventListener('click',()=>{
+  const nw=document.getElementById('new-pw').value;
+  const nw2=document.getElementById('new-pw2').value;
+  const err=document.getElementById('changepw-error');
+  if(!nw){err.textContent='새 비밀번호를 입력하세요';err.style.display='block';return;}
+  if(nw!==nw2){err.textContent='비밀번호가 일치하지 않습니다';err.style.display='block';return;}
+  if(changingPwTarget==='user'){userPw=nw;localStorage.setItem('userPw',userPw);toast('일반 비밀번호가 변경되었습니다 🔑','success');}
+  else{adminPw=nw;localStorage.setItem('adminPw',adminPw);toast('관리자 비밀번호가 변경되었습니다 🛡️','success');}
+  document.getElementById('changepw-overlay').style.display='none';
+});
+
+// Logo image
+document.getElementById('logo-img-input').addEventListener('change',e=>{
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();r.onload=ev=>{logoImg=ev.target.result;localStorage.setItem('logoImg',logoImg);applyLogo();};
+  r.readAsDataURL(f);e.target.value='';
+});
+
+// Logo name
+document.getElementById('logo-name-edit-btn').addEventListener('click',()=>{
+  document.getElementById('logoname-input').value=logoName;
+  document.getElementById('logoname-overlay').style.display='flex';
+});
+document.getElementById('logoname-close').addEventListener('click',()=>document.getElementById('logoname-overlay').style.display='none');
+document.getElementById('logoname-cancel').addEventListener('click',()=>document.getElementById('logoname-overlay').style.display='none');
+document.getElementById('logoname-overlay').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.style.display='none';});
+document.getElementById('logoname-save').addEventListener('click',()=>{
+  const v=document.getElementById('logoname-input').value.trim();
+  if(!v){toast('이름을 입력하세요','error');return;}
+  logoName=v;localStorage.setItem('logoName',logoName);applyLogo();
+  document.getElementById('logoname-overlay').style.display='none';toast('로고 이름이 변경되었습니다','success');
+});
+
+// Member modal
+document.getElementById('btn-add').addEventListener('click',openAdd);
+document.getElementById('btn-add-empty')?.addEventListener('click',openAdd);
+document.getElementById('btn-save').addEventListener('click',saveMember);
+document.getElementById('btn-cancel').addEventListener('click',()=>document.getElementById('modal-overlay').style.display='none');
+document.getElementById('modal-close').addEventListener('click',()=>document.getElementById('modal-overlay').style.display='none');
+document.getElementById('modal-overlay').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.style.display='none';});
+
+// Detail modal
+document.getElementById('detail-close').addEventListener('click',()=>document.getElementById('detail-overlay').style.display='none');
+document.getElementById('detail-dismiss').addEventListener('click',()=>document.getElementById('detail-overlay').style.display='none');
+document.getElementById('detail-overlay').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.style.display='none';});
+document.getElementById('btn-detail-edit').addEventListener('click',()=>openEdit(detailId));
+document.getElementById('btn-detail-delete').addEventListener('click',()=>delMember(detailId));
+
+// Excel
+document.getElementById('btn-export').addEventListener('click',exportExcel);
+document.getElementById('excel-upload').addEventListener('change',e=>{if(e.target.files[0]){importExcel(e.target.files[0]);e.target.value='';}});
+
+// Photo
+document.getElementById('photo-input').addEventListener('change',e=>{
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();r.onload=ev=>{document.getElementById('photo-preview').innerHTML=`<img src="${ev.target.result}" style="width:100%;height:100%;object-fit:cover"/>`;};
+  r.readAsDataURL(f);e.target.value='';
+});
+document.getElementById('photo-remove').addEventListener('click',()=>document.getElementById('photo-preview').innerHTML='<span class="photo-placeholder">👤</span>');
+
+// Search
+const si=document.getElementById('search-input'),sc=document.getElementById('search-clear');
+si.addEventListener('input',()=>{searchQ=si.value;sc.classList.toggle('visible',!!searchQ);currentPage=1;cardPage=1;render();});
+sc.addEventListener('click',()=>{si.value='';searchQ='';sc.classList.remove('visible');currentPage=1;cardPage=1;render();});
+
+// Sort
+document.querySelectorAll('.sortable').forEach(th=>th.addEventListener('click',()=>{const c=th.dataset.col;if(sortCol===c)sortDir*=-1;else{sortCol=c;sortDir=1;}currentPage=1;render();}));
+
+// View toggle
+document.getElementById('view-list-btn').addEventListener('click',()=>{document.getElementById('view-list-btn').classList.add('active');document.getElementById('view-grid-btn').classList.remove('active');switchView('list');});
+document.getElementById('view-grid-btn').addEventListener('click',()=>{document.getElementById('view-grid-btn').classList.add('active');document.getElementById('view-list-btn').classList.remove('active');switchView('card');});
+
+// Nav
+document.querySelectorAll('.nav-item').forEach(item=>item.addEventListener('click',e=>{e.preventDefault();switchView(item.dataset.view);}));
+
+// Sidebar toggle
+document.getElementById('btn-menu').addEventListener('click',()=>{document.getElementById('sidebar').classList.toggle('collapsed');document.querySelector('.main-content').classList.toggle('expanded');});
+
+// Phone format
+document.getElementById('field-phone').addEventListener('input',e=>{let v=e.target.value.replace(/\D/g,'');if(v.length<=7)v=v.replace(/(\d{3})(\d+)/,'$1-$2');else v=v.replace(/(\d{3})(\d{4})(\d+)/,'$1-$2-$3');e.target.value=v.slice(0,13);});
+
+// INIT
+applyLogo();
+showLogin();
