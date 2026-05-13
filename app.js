@@ -69,7 +69,7 @@ function renderList(){
       <td>${m.photo?`<img class="table-photo" src="${m.photo}"/>`:`<div class="table-photo-placeholder">👤</div>`}</td>
       <td><span class="name-cell">${esc(m.name)}</span></td>
       <td>${esc(m.job||'-')}</td>
-      <td><span class="phone-cell">${esc(m.phone||'-')}</span></td>
+      <td>${m.phone?`<a class="phone-link" href="tel:${m.phone.replace(/[^0-9+]/g,'')}" onclick="event.stopPropagation()">${esc(m.phone)}</a>`:'-'}</td>
       <td><span class="email-cell">${esc(m.email||'-')}</span></td>
       <td>${m.birthday?fmtDate(m.birthday):'-'}</td>
       <td><span class="memo-cell">${esc(m.memo||'-')}</span></td>
@@ -93,7 +93,7 @@ function renderCards(){
       ${m.photo?`<img class="card-photo" src="${m.photo}"/>`:`<div class="card-photo-placeholder">👤</div>`}
       <div class="card-name">${esc(m.name)}</div>
       <div class="card-job">${esc(m.job||'-')}</div>
-      <div class="card-phone">${esc(m.phone||'-')}</div>
+      ${m.phone?`<a class="card-phone" href="tel:${m.phone.replace(/[^0-9+]/g,'')}" onclick="event.stopPropagation()">📞 ${esc(m.phone)}</a>`:`<span class="card-phone">-</span>`}
       ${isAdmin?`<div class="card-actions" onclick="event.stopPropagation()"><button class="action-btn edit" onclick="openEdit('${m.id}')">✏️</button><button class="action-btn del" onclick="delMember('${m.id}')">🗑️</button></div>`:''}
     </div>`;
   }).join('');
@@ -203,15 +203,16 @@ function openDetail(id){
       <div><div class="detail-name">${esc(m.name)}</div><div class="detail-job">${esc(m.job||'')}${m.company?' · '+esc(m.company):''}</div></div>
     </div>
     <div class="detail-fields">
-      ${df('📞','전화번호',m.phone)}${df('📧','이메일',m.email)}${df('⚧','성별',m.gender)}${df('🎂','생년월일',m.birthday?fmtDate(m.birthday):'')}${df('📅','가입일',m.joindate?fmtDate(m.joindate):'')}${df('📍','주소',m.address)}${df('📝','메모',m.memo)}
+      ${df('📞','전화번호',m.phone,true)}${df('📧','이메일',m.email)}${df('⚧','성별',m.gender)}${df('🎂','생년월일',m.birthday?fmtDate(m.birthday):'')}${df('📅','가입일',m.joindate?fmtDate(m.joindate):'')}${df('📍','주소',m.address)}${df('📝','메모',m.memo)}
     </div>`;
   document.getElementById('btn-detail-delete').style.display=isAdmin?'inline-flex':'none';
   document.getElementById('btn-detail-edit').style.display=isAdmin?'inline-flex':'none';
   document.getElementById('detail-overlay').style.display='flex';
 }
-function df(icon,label,val){
+function df(icon,label,val,isPhone){
   if(!val)return'';
-  return`<div class="detail-field"><span class="detail-field-icon">${icon}</span><div><div class="detail-field-label">${label}</div><div class="detail-field-value">${esc(val)}</div></div></div>`;
+  const display=isPhone?`<a href="tel:${val.replace(/[^0-9+]/g,'')}" style="color:var(--green);font-family:monospace;text-decoration:none;" onclick="event.stopPropagation()">📞 ${esc(val)}</a>`:esc(val);
+  return`<div class="detail-field"><span class="detail-field-icon">${icon}</span><div><div class="detail-field-label">${label}</div><div class="detail-field-value">${display}</div></div></div>`;
 }
 
 // ADD/EDIT
@@ -474,11 +475,23 @@ document.querySelectorAll('.sortable').forEach(th=>th.addEventListener('click',(
 document.getElementById('view-list-btn').addEventListener('click',()=>{document.getElementById('view-list-btn').classList.add('active');document.getElementById('view-grid-btn').classList.remove('active');switchView('list');});
 document.getElementById('view-grid-btn').addEventListener('click',()=>{document.getElementById('view-grid-btn').classList.add('active');document.getElementById('view-list-btn').classList.remove('active');switchView('card');});
 
-// Nav
-document.querySelectorAll('.nav-item').forEach(item=>item.addEventListener('click',e=>{e.preventDefault();switchView(item.dataset.view);}));
-
-// Sidebar toggle
-document.getElementById('btn-menu').addEventListener('click',()=>{document.getElementById('sidebar').classList.toggle('collapsed');document.querySelector('.main-content').classList.toggle('expanded');});
+// Sidebar toggle (mobile-aware)
+function toggleSidebar(){
+  const sb=document.getElementById('sidebar');
+  const bd=document.getElementById('sidebar-backdrop');
+  if(window.innerWidth<=768){
+    const open=sb.classList.toggle('open');
+    bd.classList.toggle('open',open);
+  }else{
+    sb.classList.toggle('collapsed');
+    document.querySelector('.main-content').classList.toggle('expanded');
+  }
+}
+document.getElementById('btn-menu').addEventListener('click',toggleSidebar);
+document.getElementById('sidebar-backdrop').addEventListener('click',()=>{
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-backdrop').classList.remove('open');
+});
 
 // Phone format
 document.getElementById('field-phone').addEventListener('input',e=>{let v=e.target.value.replace(/\D/g,'');if(v.length<=7)v=v.replace(/(\d{3})(\d+)/,'$1-$2');else v=v.replace(/(\d{3})(\d{4})(\d+)/,'$1-$2-$3');e.target.value=v.slice(0,13);});
