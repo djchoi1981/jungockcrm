@@ -374,6 +374,33 @@
   </div>
 </div>
 
+<!-- ===== MODAL: 사진 크기 조절 ===== -->
+<div class="modal-overlay" id="crop-overlay" style="display:none;">
+  <div class="modal crop-modal">
+    <div class="modal-header">
+      <h2 class="modal-title">📸 사진 크기 조절</h2>
+      <button class="modal-close" id="crop-close">✕</button>
+    </div>
+    <div class="modal-body" style="padding:0;flex-direction:column;gap:0;">
+      <div class="crop-container" id="crop-container">
+        <img id="crop-img" draggable="false" />
+        <div class="crop-guide" id="crop-guide"></div>
+        <div class="crop-hint">드래그·핀치로 위치·크기 조정</div>
+      </div>
+      <div class="crop-controls">
+        <button class="crop-zoom-btn" id="crop-zoom-out">−</button>
+        <input type="range" id="crop-slider" min="30" max="500" value="100" style="flex:1;" />
+        <button class="crop-zoom-btn" id="crop-zoom-in">＋</button>
+        <span class="crop-scale-label" id="crop-scale-label">100%</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" id="crop-cancel">취소</button>
+      <button class="btn-primary" id="crop-apply">✅ 적용</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast-container" id="toast-container"></div>
 

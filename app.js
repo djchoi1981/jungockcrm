@@ -12,6 +12,9 @@ let fsUnsub=null,migrationChecked=false,useLocalOnly=false;
 const PER=15,CPER=12;
 const CACHE_KEY='members_cache';
 
+// CROP STATE
+let cropScale=1,cropX=0,cropY=0,cropDragging=false,cropLX=0,cropLY=0,pinchD0=0,pinchS0=1;
+
 // ── 로컬 캐시 헬퍼 ──
 function saveCache(){localStorage.setItem(CACHE_KEY,JSON.stringify(members));}
 function loadCache(){return JSON.parse(localStorage.getItem(CACHE_KEY)||'[]');}
@@ -572,13 +575,80 @@ document.getElementById('btn-detail-delete').addEventListener('click',()=>delMem
 document.getElementById('btn-export').addEventListener('click',exportExcel);
 document.getElementById('excel-upload').addEventListener('change',e=>{if(e.target.files[0]){importExcel(e.target.files[0]);e.target.value='';}});
 
-// Photo
+// Photo input → open cropper
 document.getElementById('photo-input').addEventListener('change',e=>{
   const f=e.target.files[0];if(!f)return;
-  const r=new FileReader();r.onload=ev=>{document.getElementById('photo-preview').innerHTML=`<img src="${ev.target.result}" style="width:100%;height:100%;object-fit:cover"/>`;};
+  const r=new FileReader();r.onload=ev=>openCropper(ev.target.result);
   r.readAsDataURL(f);e.target.value='';
 });
 document.getElementById('photo-remove').addEventListener('click',()=>document.getElementById('photo-preview').innerHTML='<span class="photo-placeholder">👤</span>');
+
+// CROP FUNCTIONS
+function openCropper(src){
+  const img=document.getElementById('crop-img');
+  cropScale=1;cropX=0;cropY=0;
+  img.src=src;
+  img.onload=()=>{
+    const c=document.getElementById('crop-container');
+    const guideSize=c.offsetWidth*0.8;
+    const minDim=Math.min(img.naturalWidth,img.naturalHeight);
+    cropScale=guideSize/minDim;
+    applyXform();
+    document.getElementById('crop-overlay').style.display='flex';
+  };
+}
+function applyXform(){
+  const img=document.getElementById('crop-img');
+  img.style.transform=`translate(calc(-50% + ${cropX}px),calc(-50% + ${cropY}px)) scale(${cropScale})`;
+  const pct=Math.round(cropScale*100);
+  document.getElementById('crop-slider').value=Math.min(500,pct);
+  document.getElementById('crop-scale-label').textContent=pct+'%';
+}
+function getCropResult(){
+  const img=document.getElementById('crop-img');
+  const gRect=document.getElementById('crop-guide').getBoundingClientRect();
+  const iRect=img.getBoundingClientRect();
+  const OUT=400;
+  const canvas=document.createElement('canvas');canvas.width=OUT;canvas.height=OUT;
+  const ctx=canvas.getContext('2d');
+  ctx.beginPath();ctx.arc(OUT/2,OUT/2,OUT/2,0,Math.PI*2);ctx.clip();
+  const s=OUT/gRect.width;
+  ctx.drawImage(img,0,0,img.naturalWidth,img.naturalHeight,
+    (iRect.left-gRect.left)*s,(iRect.top-gRect.top)*s,iRect.width*s,iRect.height*s);
+  return canvas.toDataURL('image/jpeg',0.92);
+}
+
+// Crop: mouse
+const cc=document.getElementById('crop-container');
+cc.addEventListener('mousedown',e=>{cropDragging=true;cropLX=e.clientX;cropLY=e.clientY;e.preventDefault();});
+document.addEventListener('mousemove',e=>{if(!cropDragging)return;cropX+=e.clientX-cropLX;cropY+=e.clientY-cropLY;cropLX=e.clientX;cropLY=e.clientY;applyXform();});
+document.addEventListener('mouseup',()=>{cropDragging=false;});
+// Crop: wheel
+cc.addEventListener('wheel',e=>{e.preventDefault();const d=e.deltaY>0?-0.05:0.05;cropScale=Math.max(0.3,Math.min(5,cropScale*(1+d)));applyXform();},{passive:false});
+// Crop: touch
+cc.addEventListener('touchstart',e=>{
+  if(e.touches.length===1){cropDragging=true;cropLX=e.touches[0].clientX;cropLY=e.touches[0].clientY;}
+  else if(e.touches.length===2){cropDragging=false;pinchD0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);pinchS0=cropScale;}
+  e.preventDefault();
+},{passive:false});
+cc.addEventListener('touchmove',e=>{
+  if(e.touches.length===1&&cropDragging){cropX+=e.touches[0].clientX-cropLX;cropY+=e.touches[0].clientY-cropLY;cropLX=e.touches[0].clientX;cropLY=e.touches[0].clientY;}
+  else if(e.touches.length===2){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);cropScale=Math.max(0.3,Math.min(5,pinchS0*(d/pinchD0)));}
+  applyXform();e.preventDefault();
+},{passive:false});
+cc.addEventListener('touchend',()=>{cropDragging=false;});
+// Crop: slider & buttons
+document.getElementById('crop-slider').addEventListener('input',e=>{cropScale=e.target.value/100;applyXform();});
+document.getElementById('crop-zoom-in').addEventListener('click',()=>{cropScale=Math.min(5,cropScale*1.15);applyXform();});
+document.getElementById('crop-zoom-out').addEventListener('click',()=>{cropScale=Math.max(0.3,cropScale/1.15);applyXform();});
+// Crop: apply/cancel
+document.getElementById('crop-apply').addEventListener('click',()=>{
+  const url=getCropResult();
+  document.getElementById('photo-preview').innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover"/>`;
+  document.getElementById('crop-overlay').style.display='none';
+});
+document.getElementById('crop-cancel').addEventListener('click',()=>document.getElementById('crop-overlay').style.display='none');
+document.getElementById('crop-close').addEventListener('click',()=>document.getElementById('crop-overlay').style.display='none');
 
 // Search
 const si=document.getElementById('search-input'),sc=document.getElementById('search-clear');
@@ -609,6 +679,17 @@ document.getElementById('sidebar-backdrop').addEventListener('click',()=>{
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebar-backdrop').classList.remove('open');
 });
+
+// Nav (카드보기/통계 포함 모든 메뉴)
+document.querySelectorAll('.nav-item').forEach(item=>item.addEventListener('click',e=>{
+  e.preventDefault();
+  switchView(item.dataset.view);
+  // 모바일에서 nav 클릭 시 사이드바 닫기
+  if(window.innerWidth<=768){
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebar-backdrop').classList.remove('open');
+  }
+}));
 
 // Phone format
 document.getElementById('field-phone').addEventListener('input',e=>{let v=e.target.value.replace(/\D/g,'');if(v.length<=7)v=v.replace(/(\d{3})(\d+)/,'$1-$2');else v=v.replace(/(\d{3})(\d{4})(\d+)/,'$1-$2-$3');e.target.value=v.slice(0,13);});
