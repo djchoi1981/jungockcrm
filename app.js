@@ -8,23 +8,54 @@ let logoImg=localStorage.getItem('logoImg')||'';
 let currentView='list',sortCol='',sortDir=1,searchQ='',filterJob='all';
 let currentPage=1,cardPage=1,editingId=null,detailId=null;
 let changingPwTarget='user';
-let fsUnsub=null,migrationChecked=false;
+let fsUnsub=null,migrationChecked=false,useLocalOnly=false;
 const PER=15,CPER=12;
+const CACHE_KEY='members_cache';
 
-// FIRESTORE
+// ── 로컬 캐시 헬퍼 ──
+function saveCache(){localStorage.setItem(CACHE_KEY,JSON.stringify(members));}
+function loadCache(){return JSON.parse(localStorage.getItem(CACHE_KEY)||'[]');}
+
+// ── FIRESTORE 초기화 ──
 function initFirestore(){
   if(fsUnsub)fsUnsub();
+  migrationChecked=false;
+  useLocalOnly=false;
+
+  // 1) 캐시된 데이터 즉시 표시 (Firestore 응답 전)
+  const cached=loadCache();
+  if(cached.length){members=cached;render();updateCount();}
+
+  // 2) Firestore 실시간 동기화
+  const timeout=setTimeout(()=>{
+    // 3초 내 응답 없으면 로컬 전용 모드
+    if(!migrationChecked){
+      useLocalOnly=true;
+      toast('Firebase 연결 지연 - 로컬 저장 모드로 전환','error');
+      members=loadCache();render();updateCount();
+    }
+  },3000);
+
   fsUnsub=db.collection('members').onSnapshot(snap=>{
+    clearTimeout(timeout);
+    migrationChecked=true;
     members=snap.docs.map(d=>({id:d.id,...d.data()}));
+    saveCache(); // Firestore 데이터를 로컬에도 보관
     render();updateCount();
-    if(!migrationChecked){migrationChecked=true;checkMigration();}
-  },err=>toast('데이터 로드 실패: '+err.message,'error'));
+    // 구버전 로컬 데이터 마이그레이션 제안
+    const legacy=JSON.parse(localStorage.getItem('members')||'[]');
+    if(legacy.length&&snap.empty)checkMigration(legacy);
+  },err=>{
+    clearTimeout(timeout);
+    useLocalOnly=true;
+    console.error('Firestore 오류:',err);
+    toast('Firebase 연결 실패('+err.code+') - 로컬 저장 모드','error');
+    members=loadCache();render();updateCount();
+  });
 }
-function checkMigration(){
-  const loc=JSON.parse(localStorage.getItem('members')||'[]');
-  if(loc.length&&!members.length){
-    if(confirm(`로컬 데이터 ${loc.length}명을 클라우드로 마이그레이션할까요?`))migrateData(loc);
-  }
+
+function checkMigration(loc){
+  if(confirm(`로컬 데이터 ${loc.length}명을 클라우드로 마이그레이션할까요?`))migrateData(loc);
 }
 async function migrateData(loc){
   try{
@@ -43,8 +74,14 @@ async function migrateData(loc){
   }catch(e){toast('마이그레이션 실패: '+e.message,'error');}
 }
 
-// (Firestore handles persistence)
+// ── 로컬 전용 모드 저장 (Firestore 실패 시 fallback) ──
+function saveLocalOnly(){
+  saveCache();
+  render();updateCount();
+}
+
 function updateCount(){document.getElementById('sidebar-count').textContent=members.length;}
+
 
 // FILTER
 function filtered(){
@@ -283,25 +320,48 @@ async function saveMember(){
     memo:document.getElementById('field-memo').value.trim(),
     updatedAt:new Date().toISOString()};
   try{
-    await db.collection('members').doc(memberId).set(data);
-    toast(editingId?'수정되었습니다 ✅':'등록되었습니다 ✅','success');
+    if(useLocalOnly){
+      // Firestore 없을 때 로컬에만 저장
+      const idx=members.findIndex(x=>x.id===memberId);
+      if(idx>=0)members[idx]={id:memberId,...data};else members.push({id:memberId,...data});
+      saveCache();render();updateCount();
+      toast(editingId?'수정되었습니다 ✅':'등록되었습니다 ✅','success');
+    }else{
+      await db.collection('members').doc(memberId).set(data);
+      toast(editingId?'수정되었습니다 ✅':'등록되었습니다 ✅','success');
+    }
     document.getElementById('modal-overlay').style.display='none';
-  }catch(e){toast('저장 실패: '+e.message,'error');}
+  }catch(e){
+    // Firestore 실패 시 로컈로 fallback
+    const idx=members.findIndex(x=>x.id===memberId);
+    if(idx>=0)members[idx]={id:memberId,...data};else members.push({id:memberId,...data});
+    saveCache();render();updateCount();
+    toast('로컈에 임시저장 (파이어베이스 오류: '+e.code+')','error');
+    document.getElementById('modal-overlay').style.display='none';
+  }
 }
 
 // DELETE
 async function delMember(id){
   if(!confirm('이 회원을 삭제하시겠습니까?'))return;
+  if(useLocalOnly){
+    members=members.filter(m=>m.id!==id);
+    saveCache();render();
+    document.getElementById('detail-overlay').style.display='none';
+    toast('삭제되었습니다','info');
+    return;
+  }
   try{
-    // Firestore 먼저 삭제
     await db.collection('members').doc(id).delete();
-    // Storage 사진 정리 (실패해도 무시)
     try{storage.ref('photos/'+id).delete();}catch(e){}
     document.getElementById('detail-overlay').style.display='none';
     toast('삭제되었습니다','info');
   }catch(e){
-    console.error('Delete error:',e);
-    toast('삭제 실패: '+e.message,'error');
+    // Firestore 실패 시 로컈에서만 삭제
+    members=members.filter(m=>m.id!==id);
+    saveCache();render();
+    document.getElementById('detail-overlay').style.display='none';
+    toast('로컈에서 삭제 (파이어베이스 오류: '+e.code+')','error');
   }
 }
 
