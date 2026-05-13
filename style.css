@@ -254,6 +254,9 @@ button{cursor:pointer;border:none;background:none;font-family:inherit;font-size:
 .form-input:focus,.form-textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow);background:#fff}
 .form-textarea{resize:vertical;min-height:75px}
 select.form-input{cursor:pointer}
+.address-row{display:flex;gap:8px;align-items:stretch}
+.address-row .form-input{cursor:pointer;background:#f8f7ff}
+.address-row .form-input:hover{border-color:var(--accent)}
 
 /* Detail */
 .detail-body{padding:22px}

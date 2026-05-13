@@ -203,7 +203,7 @@ function openDetail(id){
       <div><div class="detail-name">${esc(m.name)}</div><div class="detail-job">${esc(m.job||'')}${m.company?' · '+esc(m.company):''}</div></div>
     </div>
     <div class="detail-fields">
-      ${df('📞','전화번호',m.phone,true)}${df('📧','이메일',m.email)}${df('⚧','성별',m.gender)}${df('🎂','생년월일',m.birthday?fmtDate(m.birthday):'')}${df('📅','가입일',m.joindate?fmtDate(m.joindate):'')}${df('📍','주소',m.address)}${df('📝','메모',m.memo)}
+      ${df('📞','전화번호',m.phone,true)}${df('📧','이메일',m.email)}${df('⚧','성별',m.gender)}${df('🎂','생년월일',m.birthday?fmtDate(m.birthday):'')}${df('📅','가입일',m.joindate?fmtDate(m.joindate):'')}${(()=>{if(!m.address)return'';const p=m.address.split('||');return df('📍','주소',p[0]+(p[1]?' '+p[1]:''));})()}${df('📝','메모',m.memo)}
     </div>`;
   document.getElementById('btn-detail-delete').style.display=isAdmin?'inline-flex':'none';
   document.getElementById('btn-detail-edit').style.display=isAdmin?'inline-flex':'none';
@@ -220,14 +220,25 @@ function openAdd(){editingId=null;document.getElementById('modal-title').textCon
 function openEdit(id){
   editingId=id;const m=members.find(x=>x.id===id);if(!m)return;
   document.getElementById('modal-title').textContent='회원 수정';
-  ['name','gender','phone','email','job','company','birthday','joindate','address','memo'].forEach(f=>{const el=document.getElementById('field-'+f);if(el)el.value=m[f]||'';});
+  ['name','gender','phone','email','job','company','birthday','joindate','memo'].forEach(f=>{const el=document.getElementById('field-'+f);if(el)el.value=m[f]||'';});
+  // 주소 스플릿: 첫 줄이 기본 주소, 나머지가 상세주소
+  if(m.address){
+    const parts=m.address.split('||');
+    document.getElementById('field-address').value=parts[0]||'';
+    const det=document.getElementById('field-address-detail');
+    if(det)det.value=parts[1]||'';
+  }else{
+    document.getElementById('field-address').value='';
+    const det=document.getElementById('field-address-detail');
+    if(det)det.value='';
+  }
   const prev=document.getElementById('photo-preview');
   prev.innerHTML=m.photo?`<img src="${m.photo}" style="width:100%;height:100%;object-fit:cover"/>`:'<span class="photo-placeholder">👤</span>';
   document.getElementById('modal-overlay').style.display='flex';
   document.getElementById('detail-overlay').style.display='none';
 }
 function clearForm(){
-  ['name','gender','phone','email','job','company','birthday','joindate','address','memo'].forEach(f=>{const el=document.getElementById('field-'+f);if(el)el.value='';});
+  ['name','gender','phone','email','job','company','birthday','joindate','address','address-detail','memo'].forEach(f=>{const el=document.getElementById('field-'+f);if(el)el.value='';});
   document.getElementById('photo-preview').innerHTML='<span class="photo-placeholder">👤</span>';
 }
 async function saveMember(){
@@ -235,6 +246,18 @@ async function saveMember(){
   const phone=document.getElementById('field-phone').value.trim();
   if(!name){toast('이름을 입력해주세요','error');return;}
   if(!phone){toast('전화번호를 입력해주세요','error');return;}
+
+  // 중복 체크
+  const phoneClean=phone.replace(/\D/g,'');
+  const dupPhone=members.find(m=>m.id!==editingId && m.phone && m.phone.replace(/\D/g,'')===phoneClean);
+  if(dupPhone){
+    if(!confirm(`⚠️ 이미 동일한 전화번호로 등록된 \n권자: ${dupPhone.name}\n\n계속 등록하시겠습니까?`))return;
+  }
+  const dupName=members.find(m=>m.id!==editingId && m.name===name);
+  if(dupName && !dupPhone){
+    if(!confirm(`⚠️ '​${name}'이름의 회원이 이미 있습니다.\n\n계속 등록하시겠습니까?`))return;
+  }
+
   const memberId=editingId||Date.now().toString();
   const img=document.getElementById('photo-preview').querySelector('img');
   let photo=img?img.src:'';
@@ -244,14 +267,19 @@ async function saveMember(){
       await r.putString(photo,'data_url');photo=await r.getDownloadURL();
     }catch(e){photo='';}
   }
-  const data={name,phone,photo,
+
+  // 주소 합치기
+  const addrBase=document.getElementById('field-address').value.trim();
+  const addrDet=(document.getElementById('field-address-detail')||{value:''}).value.trim();
+  const address=addrBase+(addrDet?'||'+addrDet:'');
+
+  const data={name,phone,photo,address,
     gender:document.getElementById('field-gender').value,
     email:document.getElementById('field-email').value.trim(),
     job:document.getElementById('field-job').value.trim(),
     company:document.getElementById('field-company').value.trim(),
     birthday:document.getElementById('field-birthday').value,
     joindate:document.getElementById('field-joindate').value,
-    address:document.getElementById('field-address').value.trim(),
     memo:document.getElementById('field-memo').value.trim(),
     updatedAt:new Date().toISOString()};
   try{
@@ -265,11 +293,37 @@ async function saveMember(){
 async function delMember(id){
   if(!confirm('이 회원을 삭제하시겠습니까?'))return;
   try{
-    try{await storage.ref('photos/'+id).delete();}catch(e){}
+    // Firestore 먼저 삭제
     await db.collection('members').doc(id).delete();
+    // Storage 사진 정리 (실패해도 무시)
+    try{storage.ref('photos/'+id).delete();}catch(e){}
     document.getElementById('detail-overlay').style.display='none';
     toast('삭제되었습니다','info');
-  }catch(e){toast('삭제 실패: '+e.message,'error');}
+  }catch(e){
+    console.error('Delete error:',e);
+    toast('삭제 실패: '+e.message,'error');
+  }
+}
+
+// ADDRESS SEARCH
+function openAddressSearch(){
+  if(typeof daum==='undefined'||!daum.Postcode){
+    toast('주소 검색 서비스를 불러오는 중입니다...','info');
+    const s=document.createElement('script');
+    s.src='https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+    s.onload=()=>openAddressSearch();
+    document.head.appendChild(s);
+    return;
+  }
+  new daum.Postcode({
+    oncomplete:function(data){
+      const addr=data.roadAddress||data.jibunAddress;
+      document.getElementById('field-address').value=addr;
+      const det=document.getElementById('field-address-detail');
+      if(det){det.value='';det.focus();}
+    },
+    width:'100%',height:'100%'
+  }).open();
 }
 
 // EXCEL

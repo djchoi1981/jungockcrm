@@ -320,7 +320,11 @@
         </div>
         <div class="form-group form-group-full">
           <label class="form-label">주소</label>
-          <input type="text" id="field-address" class="form-input" placeholder="주소" maxlength="200" />
+          <div class="address-row">
+            <input type="text" id="field-address" class="form-input" placeholder="주소 검색 클릭" readonly maxlength="200" style="flex:1;cursor:pointer;" onclick="openAddressSearch()" />
+            <button type="button" class="btn-sm btn-outline" onclick="openAddressSearch()" style="white-space:nowrap;">🔍 주소 검색</button>
+          </div>
+          <input type="text" id="field-address-detail" class="form-input" placeholder="상세 주소 (동/호수 등)" maxlength="100" style="margin-top:6px;" />
         </div>
         <div class="form-group form-group-full">
           <label class="form-label">메모</label>
@@ -373,6 +377,7 @@
 <!-- Toast -->
 <div class="toast-container" id="toast-container"></div>
 
+<script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
