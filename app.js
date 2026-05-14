@@ -213,6 +213,9 @@ function applyAdminUI(){
   const thAct=document.getElementById('th-actions');
   thAct.style.display='table-cell';
 
+  const emptyAddBtn=document.getElementById('btn-add-empty');
+  if(emptyAddBtn) emptyAddBtn.style.display=isAdmin?'inline-flex':'none';
+
   render();
 }
 
@@ -395,7 +398,7 @@ function openAddressSearch(){
 // EXCEL
 function exportExcel(){
   if(!members.length){toast('내보낼 회원이 없습니다','error');return;}
-  const ws=XLSX.utils.json_to_sheet(members.map(m=>({이름:m.name,성별:m.gender,전화번호:m.phone,이메일:m.email,직업:m.job,소속:m.company,생년월일:m.birthday,가입일:m.joindate,주소:m.address,메모:m.memo})));
+  const ws=XLSX.utils.json_to_sheet(members.map(m=>({이름:m.name,사진:m.photo||'',성별:m.gender,전화번호:m.phone,이메일:m.email,직업:m.job,소속:m.company,생년월일:m.birthday,가입일:m.joindate,주소:m.address,메모:m.memo})));
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'회원명부');
   XLSX.writeFile(wb,`회원명부_${new Date().toISOString().slice(0,10)}.xlsx`);
   toast('엑셀 다운로드 완료 📥','success');
@@ -417,7 +420,7 @@ function importExcel(file){
           phone:String(r['전화번호']||r['phone']||'').trim(),email:String(r['이메일']||'').trim(),
           job:String(r['직업']||'').trim(),company:String(r['소속']||'').trim(),
           birthday:String(r['생년월일']||'').trim(),joindate:String(r['가입일']||'').trim(),
-          address:String(r['주소']||'').trim(),memo:String(r['메모']||'').trim(),photo:''};
+          address:String(r['주소']||'').trim(),memo:String(r['메모']||'').trim(),photo:String(r['사진']||r['photo']||'').trim()};
         n++;
       });
       if(!n){toast('가져올 회원 데이터가 없습니다','error');return;}
