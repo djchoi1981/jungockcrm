@@ -108,7 +108,7 @@ function filtered(){
 function page(arr,p,per){return arr.slice((p-1)*per,p*per);}
 
 function vf(k,val,fmt){
-  if(!isAdmin&&fieldVisibility[k]===false)return'<span class="badge-private">🔒 비공개</span>';
+  if(!isAdmin&&fieldVisibility[k]===false)return '';
   if(!val)return'-';
   return fmt?fmt(val):esc(val);
 }
@@ -121,19 +121,28 @@ function renderList(){
   const tbl=document.querySelector('.member-table');
   if(!arr.length){tbody.innerHTML='';empty.style.display='flex';tbl.style.display='none';document.getElementById('pagination').innerHTML='';return;}
   empty.style.display='none';tbl.style.display='';
+  
+  // 비공개 항목인 경우 테이블 열(컬럼) 자체를 숨김 처리
+  const cols=['job','name','birthday','phone','address','joindate','company','memo'];
+  cols.forEach(k=>{
+    const th=document.querySelector(`.th-${k}`);
+    if(th)th.style.display=(!isAdmin&&fieldVisibility[k]===false)?'none':'';
+  });
+  const tdVis=k=>(!isAdmin&&fieldVisibility[k]===false)?' style="display:none;"':'';
+
   tbody.innerHTML=page(arr,currentPage,PER).map(m=>{
     const addr=m.address?m.address.split('||').join(' '):'';
     return `
     <tr data-id="${m.id}" onclick="openDetail('${m.id}')">
       <td>${m.photo?`<img class="table-photo" src="${m.photo}"/>`:`<div class="table-photo-placeholder">👤</div>`}</td>
-      <td>${vf('job',m.job)}</td>
-      <td><span class="name-cell">${vf('name',m.name)}</span></td>
-      <td>${vf('birthday',m.birthday,fmtDate)}</td>
-      <td>${vf('phone',m.phone,v=>`<a class="phone-link" href="tel:${v.replace(/[^0-9+]/g,'')}" onclick="event.stopPropagation()">${esc(v)}</a>`)}</td>
-      <td><span class="address-cell">${vf('address',addr)}</span></td>
-      <td>${vf('joindate',m.joindate,fmtDate)}</td>
-      <td>${vf('company',m.company)}</td>
-      <td><span class="memo-cell">${vf('memo',m.memo)}</span></td>
+      <td${tdVis('job')}>${esc(m.job||'-')}</td>
+      <td${tdVis('name')}><span class="name-cell">${esc(m.name)}</span></td>
+      <td${tdVis('birthday')}>${m.birthday?fmtDate(m.birthday):'-'}</td>
+      <td${tdVis('phone')}>${m.phone?`<a class="phone-link" href="tel:${m.phone.replace(/[^0-9+]/g,'')}" onclick="event.stopPropagation()">${esc(m.phone)}</a>`:'-'}</td>
+      <td${tdVis('address')}><span class="address-cell">${esc(addr||'-')}</span></td>
+      <td${tdVis('joindate')}>${m.joindate?fmtDate(m.joindate):'-'}</td>
+      <td${tdVis('company')}>${esc(m.company||'-')}</td>
+      <td${tdVis('memo')}><span class="memo-cell">${esc(m.memo||'-')}</span></td>
       <td onclick="event.stopPropagation()">
         <div class="action-btns"><button class="action-btn edit" onclick="openEdit('${m.id}')">✏️</button>${isAdmin?`<button class="action-btn del" onclick="delMember('${m.id}')">🗑️</button>`:''}</div>
       </td>
@@ -153,9 +162,9 @@ function renderCards(){
     return `<div class="member-card" onclick="openDetail('${m.id}')">
       ${bd?'<div class="card-badge">🎂 이번달 생일</div>':''}
       ${m.photo?`<img class="card-photo" src="${m.photo}"/>`:`<div class="card-photo-placeholder">👤</div>`}
-      <div class="card-name">${vf('name',m.name)}</div>
-      <div class="card-job">${vf('job',m.job)}</div>
-      <div class="card-phone-wrap">${vf('phone',m.phone,v=>`<a class="card-phone" href="tel:${v.replace(/[^0-9+]/g,'')}" onclick="event.stopPropagation()">📞 ${esc(v)}</a>`)}</div>
+      ${(!isAdmin&&fieldVisibility.name===false)?'':`<div class="card-name">${esc(m.name)}</div>`}
+      ${(!isAdmin&&fieldVisibility.job===false||!m.job)?'':`<div class="card-job">${esc(m.job)}</div>`}
+      ${(!isAdmin&&fieldVisibility.phone===false||!m.phone)?'':`<div class="card-phone-wrap"><a class="card-phone" href="tel:${m.phone.replace(/[^0-9+]/g,'')}" onclick="event.stopPropagation()">📞 ${esc(m.phone)}</a></div>`}
       <div class="card-actions" onclick="event.stopPropagation()"><button class="action-btn edit" onclick="openEdit('${m.id}')">✏️</button>${isAdmin?`<button class="action-btn del" onclick="delMember('${m.id}')">🗑️</button>`:''}</div>
     </div>`;
   }).join('');
@@ -265,7 +274,12 @@ function openDetail(id){
   document.getElementById('detail-body').innerHTML=`
     <div class="detail-header">
       ${m.photo?`<img class="detail-photo" src="${m.photo}"/>`:`<div class="detail-photo-placeholder">👤</div>`}
-      <div><div class="detail-name">${vf('name',m.name)}</div><div class="detail-job">${vf('job',m.job)}${m.company?' · '+vf('company',m.company):''}</div></div>
+      <div>
+        ${(!isAdmin&&fieldVisibility.name===false)?'':`<div class="detail-name">${esc(m.name)}</div>`}
+        <div class="detail-job">
+          ${[(!isAdmin&&fieldVisibility.job===false)?'':m.job, (!isAdmin&&fieldVisibility.company===false)?'':m.company].filter(Boolean).map(esc).join(' · ')}
+        </div>
+      </div>
     </div>
     <div class="detail-fields">
       ${df('📞','전화번호',m.phone,true,'phone')}${df('💼','직책',m.job,false,'job')}${df('🎂','생년월일',m.birthday?fmtDate(m.birthday):'',false,'birthday')}${df('📅','최초위촉일',m.joindate?fmtDate(m.joindate):'',false,'joindate')}${df('🏢','추천인',m.company,false,'company')}${(()=>{const addr=m.address?m.address.split('||').join(' '):'';return df('📍','주소',addr,false,'address');})()}${df('📝','비고',m.memo,false,'memo')}
@@ -275,9 +289,7 @@ function openDetail(id){
   document.getElementById('detail-overlay').style.display='flex';
 }
 function df(icon,label,val,isPhone,key){
-  if(!isAdmin&&fieldVisibility[key]===false){
-    return`<div class="detail-field"><span class="detail-field-icon">${icon}</span><div><div class="detail-field-label">${label}</div><div class="detail-field-value"><span class="badge-private">🔒 비공개</span></div></div></div>`;
-  }
+  if(!isAdmin&&fieldVisibility[key]===false)return '';
   if(!val)return'';
   const display=isPhone?`<a href="tel:${val.replace(/[^0-9+]/g,'')}" style="color:var(--green);font-family:monospace;text-decoration:none;" onclick="event.stopPropagation()">📞 ${esc(val)}</a>`:esc(val);
   return`<div class="detail-field"><span class="detail-field-icon">${icon}</span><div><div class="detail-field-label">${label}</div><div class="detail-field-value">${display}</div></div></div>`;
