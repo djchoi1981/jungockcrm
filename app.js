@@ -327,16 +327,12 @@ async function saveMember(){
   if(!name){toast('이름을 입력해주세요','error');return;}
   if(!phone){toast('전화번호를 입력해주세요','error');return;}
 
-  // 중복 체크
+  // 중복 체크 (이름 또는 전화번호가 동일한 경우 등록 제외)
   const phoneClean=phone.replace(/\D/g,'');
-  const dupPhone=members.find(m=>m.id!==editingId && m.phone && m.phone.replace(/\D/g,'')===phoneClean);
-  if(dupPhone){
-    if(!confirm(`⚠️ 이미 동일한 전화번호(${dupPhone.phone})로 등록된 기존 회원(${dupPhone.name})이 존재합니다.\n\n그래도 중복으로 저장하시겠습니까?`))return;
-  } else {
-    const dupName=members.find(m=>m.id!==editingId && m.name===name);
-    if(dupName){
-      if(!confirm(`⚠️ '${name}' 이름을 가진 회원이 이미 존재합니다.\n\n동명이인으로 저장하시겠습니까?`))return;
-    }
+  const dup=members.find(m=>m.id!==editingId && (m.name===name || (m.phone && m.phone.replace(/\D/g,'')===phoneClean)));
+  if(dup){
+    toast(`등록 제외: 이미 동일한 이름 또는 전화번호(${dup.name} / ${dup.phone})가 존재합니다.`,'error');
+    return;
   }
 
   const memberId=editingId||Date.now().toString();
@@ -443,15 +439,29 @@ function importExcel(file){
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
       const updates={};
       let n=0;
+      let dupCount=0;
+      const existingNames=new Set(members.map(m=>m.name));
+      const existingPhones=new Set(members.map(m=>(m.phone||'').replace(/\D/g,'')).filter(Boolean));
+
       rows.forEach(r=>{
-        const name=r['성명']||r['이름']||r['name']||'';if(!name)return;
+        const name=String(r['성명']||r['이름']||r['name']||'').trim();if(!name)return;
+        const phone=String(r['전화번호']||r['phone']||'').trim();
+        const phoneClean=phone.replace(/\D/g,'');
+
+        if(existingNames.has(name) || (phoneClean && existingPhones.has(phoneClean))){
+          dupCount++;
+          return;
+        }
+        existingNames.add(name);
+        if(phoneClean)existingPhones.add(phoneClean);
+
         const id=Date.now().toString()+'_'+n+'_'+Math.random().toString(36).substr(2,5);
         updates[id]={
           id,
-          name:String(name).trim(),
+          name,
           job:String(r['직책']||r['직업']||r['job']||'').trim(),
           birthday:String(r['생년월일']||r['birthday']||'').trim(),
-          phone:String(r['전화번호']||r['phone']||'').trim(),
+          phone,
           address:String(r['주소']||r['address']||'').trim(),
           joindate:String(r['최초위촉일']||r['가입일']||r['joindate']||'').trim(),
           company:String(r['추천인']||r['소속']||r['company']||'').trim(),
@@ -459,19 +469,22 @@ function importExcel(file){
           photo:String(r['사진']||r['photo']||'').trim()};
         n++;
       });
-      if(!n){toast('가져올 회원 데이터가 없습니다','error');return;}
+      if(!n){
+        toast(dupCount?`중복 회원 ${dupCount}명 제외 후 가져올 데이터가 없습니다.`:'가져올 회원 데이터가 없습니다','error');
+        return;
+      }
 
       if(useLocalOnly){
         Object.values(updates).forEach(m=>members.push(m));
         saveCache();render();updateCount();
-        toast(`${n}명 로컬 가져오기 완료 📤`,'success');
+        toast(`${n}명 로컬 가져오기 완료 📤`+(dupCount?` (중복 제외: ${dupCount}명)`:''),'success');
       }else{
         // 화면 즉시 갱신을 위해 로컬 배열에 선반영
         Object.values(updates).forEach(m=>members.push(m));
         saveCache();render();updateCount();
 
         await database.ref('members').update(updates);
-        toast(`${n}명 엑셀 업로드 완료 📤`,'success');
+        toast(`${n}명 엑셀 업로드 완료 📤`+(dupCount?` (중복 제외: ${dupCount}명)`:''),'success');
       }
     }catch(err){toast('파일 읽기 오류: '+err.message,'error');}
   };reader.readAsArrayBuffer(file);
@@ -546,7 +559,32 @@ document.getElementById('admin-pw-input').addEventListener('keydown',e=>{if(e.ke
 
 // Admin menu items
 document.getElementById('btn-downgrade-admin').addEventListener('click',()=>{
-  isAdmin=false;document.getElementById('admin-overlay').style.display='none';applyAdminUI();toast('일반 모드로 전환되었습니다','정보');
+  isAdmin=false;document.getElementById('admin-overlay').style.display='none';applyAdminUI();toast('일반 모드로 전환되었습니다','info');
+});
+document.getElementById('btn-delete-all-data')?.addEventListener('click',async ()=>{
+  const input=prompt('⚠️ 데이터 전체 삭제\n\n모든 회원 데이터가 영구적으로 삭제됩니다.\n계속하려면 관리자 비밀번호를 입력하세요:');
+  if(input===null)return;
+  if(input!==adminPw){
+    toast('비밀번호가 일치하지 않습니다. 삭제가 취소되었습니다.','error');
+    return;
+  }
+  if(!confirm('정말 모든 회원 데이터를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.'))return;
+
+  document.getElementById('admin-overlay').style.display='none';
+  members=[];
+  saveCache();
+  render();
+  updateCount();
+  if(!useLocalOnly&&database){
+    try{
+      await database.ref('members').remove();
+      toast('모든 데이터가 성공적으로 삭제되었습니다 🗑️','success');
+    }catch(e){
+      toast('클라우드 데이터 삭제 실패: '+e.message,'error');
+    }
+  }else{
+    toast('로컬 데이터가 전체 삭제되었습니다 🗑️','success');
+  }
 });
 document.getElementById('btn-logout-all').addEventListener('click',()=>{
   document.getElementById('admin-overlay').style.display='none';
