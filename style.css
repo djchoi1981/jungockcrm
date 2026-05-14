@@ -70,6 +70,8 @@ button {
 .login-overlay {
   position: fixed;
   inset: 0;
+  width: 100vw;
+  height: 100vh;
   height: 100dvh;
   z-index: 9999;
   background: linear-gradient(135deg, #e0e7ff 0%, #ede9fe 50%, #f3e8ff 100%);
@@ -80,6 +82,7 @@ button {
   padding: 20px;
   overflow: hidden;
   overscroll-behavior: none;
+  box-sizing: border-box;
 }
 
 .login-overlay.hidden {
@@ -786,15 +789,20 @@ button {
   background: var(--surface);
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  overflow-x: auto;
+  overflow: hidden;
   box-shadow: var(--shadow);
   margin-top: 20px;
 }
 
+/* Separate scroll wrapper so sticky thead works */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .member-table {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
+  border-collapse: collapse;
   font-size: 0.9rem;
 }
 
@@ -803,10 +811,8 @@ button {
   border-bottom: 2px solid var(--border);
 }
 
+/* th sticky: table-wrap must NOT have overflow for sticky to work in main scroll */
 .member-table th {
-  position: sticky;
-  top: calc(var(--topbar-h) + 56px); /* Desktop filter bar height */
-  z-index: 20;
   padding: 16px 18px;
   text-align: left;
   color: var(--text2);
@@ -1925,12 +1931,12 @@ select.form-input {
     margin-top: 20px;
   }
   .th-memo, .td-memo, .th-birthday, .td-birthday { display: none; }
-  .member-table thead {
+  .member-table thead { position: static; }
+  .member-table th {
     position: static;
   }
-  .member-table th {
-    top: calc(var(--topbar-h) + 48px); /* Mobile filter bar height */
-  }
+  .table-wrap { overflow: hidden; margin-top: 12px; }
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .member-table th, .member-table td { padding: 12px 14px; }
   .card-grid {
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));

@@ -101,28 +101,30 @@
   <section class="content-area" id="view-list-section">
     <div class="pagination" id="pagination"></div>
     <div class="table-wrap">
-      <table class="member-table" id="member-table">
-        <thead>
-          <tr>
-            <th class="th-photo">사진</th>
-            <th class="th-job sortable" data-col="job">직책 <span class="sort-icon">↕</span></th>
-            <th class="th-name sortable" data-col="name">성명 <span class="sort-icon">↕</span></th>
-            <th class="th-birthday sortable" data-col="birthday">생년월일 <span class="sort-icon">↕</span></th>
-            <th class="th-phone">전화번호</th>
-            <th class="th-address">주소</th>
-            <th class="th-joindate sortable" data-col="joindate">최초위촉일 <span class="sort-icon">↕</span></th>
-            <th class="th-company">추천인</th>
-            <th class="th-memo">비고</th>
-            <th class="th-actions admin-col" id="th-actions">관리</th>
-          </tr>
-        </thead>
-        <tbody id="member-tbody"></tbody>
-      </table>
-      <div class="empty-state" id="empty-state" style="display:none;">
-        <div class="empty-icon">👥</div>
-        <div class="empty-title">등록된 회원이 없습니다</div>
-        <div class="empty-sub">관리자 로그인 후 회원을 추가하세요</div>
-        <button class="btn-primary admin-show" id="btn-add-empty" style="display:none;">＋ 회원 등록</button>
+      <div class="table-scroll">
+        <table class="member-table" id="member-table">
+          <thead>
+            <tr>
+              <th class="th-photo">사진</th>
+              <th class="th-job sortable" data-col="job">직책 <span class="sort-icon">↕</span></th>
+              <th class="th-name sortable" data-col="name">성명 <span class="sort-icon">↕</span></th>
+              <th class="th-birthday sortable" data-col="birthday">생년월일 <span class="sort-icon">↕</span></th>
+              <th class="th-phone">전화번호</th>
+              <th class="th-address">주소</th>
+              <th class="th-joindate sortable" data-col="joindate">최초위촉일 <span class="sort-icon">↕</span></th>
+              <th class="th-company">추천인</th>
+              <th class="th-memo">비고</th>
+              <th class="th-actions admin-col" id="th-actions">관리</th>
+            </tr>
+          </thead>
+          <tbody id="member-tbody"></tbody>
+        </table>
+        <div class="empty-state" id="empty-state" style="display:none;">
+          <div class="empty-icon">👥</div>
+          <div class="empty-title">등록된 회원이 없습니다</div>
+          <div class="empty-sub">관리자 로그인 후 회원을 추가하세요</div>
+          <button class="btn-primary admin-show" id="btn-add-empty" style="display:none;">＋ 회원 등록</button>
+        </div>
       </div>
     </div>
   </section>
