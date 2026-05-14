@@ -189,7 +189,7 @@ function renderCards(){
 function renderStats(){
   const m2=new Date().getMonth()+1;
   document.getElementById('stat-total').textContent=members.length;
-  document.getElementById('stat-birthday').textContent=members.filter(m=>m.birthday&&parseInt(m.birthday.split('-')[1])===m2).length;
+  document.getElementById('stat-birthday').textContent=members.filter(m=>isBirthdayMonth(m.birthday)).length;
   const jobs=[...new Set(members.map(m=>m.job||'').filter(Boolean))];
   document.getElementById('stat-jobs').textContent=jobs.length;
   document.getElementById('stat-photos').textContent=members.filter(m=>m.photo).length;
@@ -197,8 +197,14 @@ function renderStats(){
   const sorted=Object.entries(jc).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const mx=sorted[0]?.[1]||1;
   document.getElementById('job-chart').innerHTML=sorted.length?sorted.map(([j,c])=>`<div class="bar-row"><span class="bar-label" title="${esc(j)}">${esc(j)}</span><div class="bar-track"><div class="bar-fill" style="width:${(c/mx*100).toFixed(1)}%"></div></div><span class="bar-count">${c}</span></div>`).join(''):'<div class="no-birthday">데이터 없음</div>';
-  const bds=members.filter(m=>m.birthday&&parseInt(m.birthday.split('-')[1])===m2).sort((a,b)=>a.birthday.split('-')[2]-b.birthday.split('-')[2]);
-  document.getElementById('birthday-list').innerHTML=bds.length?bds.map(m=>`<div class="birthday-row"><span class="birthday-name">🎂 ${esc(m.name)}</span><span class="birthday-date">${m.birthday.split('-')[1]}월 ${m.birthday.split('-')[2]}일</span></div>`).join(''):'<div class="no-birthday">이번 달 생일인 회원이 없습니다</div>';
+  const bds=members.filter(m=>isBirthdayMonth(m.birthday)).sort((a,b)=>{
+    const da=String(a.birthday||'').split(/[-/.]/)[2]||'0';
+    const db=String(b.birthday||'').split(/[-/.]/)[2]||'0';
+    return parseInt(da)-parseInt(db);
+  });
+  document.getElementById('birthday-list').innerHTML=bds.length
+    ?bds.map(m=>`<div class="birthday-row"><span class="birthday-name">🎂 ${esc(m.name)}</span><span class="birthday-date">${fmtDate(m.birthday)}</span></div>`).join('')
+    :'<div class="no-birthday">이번 달 생일인 회원이 없습니다</div>';
 }
 
 // PAGINATION
