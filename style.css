@@ -1862,7 +1862,7 @@ select.form-input {
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 1024px) {
-  .th-email, .th-memo { display: none; }
+  .th-memo, .td-memo { display: none; }
   .search-input { width: 180px; }
   .search-input:focus { width: 220px; }
   .stats-charts { grid-template-columns: 1fr; }
@@ -1905,7 +1905,7 @@ select.form-input {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
-  .th-email, .th-memo, .th-birthday { display: none; }
+  .th-memo, .td-memo, .th-birthday, .td-birthday { display: none; }
   .member-table th, .member-table td { padding: 12px 14px; }
   .card-grid {
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));

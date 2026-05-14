@@ -128,7 +128,7 @@ function renderList(){
     const th=document.querySelector(`.th-${k}`);
     if(th)th.style.display=(!isAdmin&&fieldVisibility[k]===false)?'none':'';
   });
-  const tdVis=k=>(!isAdmin&&fieldVisibility[k]===false)?' style="display:none;"':'';
+  const tdVis=k=>` class="td-${k}"`+((!isAdmin&&fieldVisibility[k]===false)?' style="display:none;"':'');
 
   tbody.innerHTML=page(arr,currentPage,PER).map(m=>{
     const addr=m.address?m.address.split('||').join(' '):'';
