@@ -1902,7 +1902,7 @@ select.form-input {
   .mode-badge span:last-child { display: none; }
   .admin-only-btns .btn-secondary span:not(:first-child) { display: none; }
   .content-area {
-    padding: 16px;
+    padding: 16px 16px 80px;
     max-height: none;
     overflow: visible;
   }
