@@ -446,7 +446,8 @@ function parseExcelDate(v){
   }
   if(/^\d{4,5}$/.test(s)){
     const serial=parseInt(s,10);
-    const date=new Date((serial-25569)*86400*1000);
+    // 엑셀 날짜 일련번호(1900-01-01 기준)를 JS 날짜로 변환
+    const date=new Date(Math.round((serial-25569)*86400*1000));
     const y=date.getUTCFullYear(), m=String(date.getUTCMonth()+1).padStart(2,'0'), d=String(date.getUTCDate()).padStart(2,'0');
     return `${y}-${m}-${d}`;
   }
@@ -547,10 +548,20 @@ function toast(msg,type='info'){
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function fmtDate(d){
   if(!d||d==='-')return'-';
-  const s=String(d).trim();
+  let s=String(d).trim();
+  
+  // 만약 4~5자리 숫자(엑셀 일련번호)라면 먼저 날짜 문자열로 변환
+  if(/^\d{4,5}$/.test(s)){
+    const serial=parseInt(s,10);
+    const date=new Date(Math.round((serial-25569)*86400*1000));
+    const yr=date.getUTCFullYear(), mt=String(date.getUTCMonth()+1).padStart(2,'0'), dy=String(date.getUTCDate()).padStart(2,'0');
+    s=`${yr}-${mt}-${dy}`;
+  }
+
   const p=s.split(/[-/.]/);
   if(p.length===3){
-    return `${p[0]}년 ${parseInt(p[1])}월 ${parseInt(p[2])}일`;
+    const yr=p[0], mt=String(p[1]).padStart(2,'0'), dy=String(p[2]).padStart(2,'0');
+    return `${yr}년 ${mt}월 ${dy}일`;
   }
   return s;
 }

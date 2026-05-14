@@ -73,9 +73,8 @@ button {
   height: 100dvh;
   z-index: 9999;
   background: linear-gradient(135deg, #e0e7ff 0%, #ede9fe 50%, #f3e8ff 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   transition: opacity 0.4s ease, visibility 0.4s ease;
   padding: 20px;
   overflow: hidden;
@@ -796,12 +795,12 @@ button {
 .member-table thead {
   background: var(--surface2);
   border-bottom: 2px solid var(--border);
-  position: sticky;
-  top: var(--topbar-h);
-  z-index: 20;
 }
 
 .member-table th {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 20;
   padding: 16px 18px;
   text-align: left;
   color: var(--text2);
@@ -1916,6 +1915,9 @@ select.form-input {
   }
   .th-memo, .td-memo, .th-birthday, .td-birthday { display: none; }
   .member-table thead {
+    position: static;
+  }
+  .member-table th {
     top: var(--topbar-h);
   }
   .member-table th, .member-table td { padding: 12px 14px; }
