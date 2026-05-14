@@ -73,8 +73,9 @@ button {
   height: 100dvh;
   z-index: 9999;
   background: linear-gradient(135deg, #e0e7ff 0%, #ede9fe 50%, #f3e8ff 100%);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: opacity 0.4s ease, visibility 0.4s ease;
   padding: 20px;
   overflow: hidden;
@@ -687,6 +688,9 @@ button {
   background: var(--surface);
   gap: 16px;
   box-shadow: var(--shadow-sm);
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 40;
 }
 
 .filter-chips {
@@ -782,8 +786,9 @@ button {
   background: var(--surface);
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: var(--shadow);
+  margin-top: 20px;
 }
 
 .member-table {
@@ -800,7 +805,7 @@ button {
 
 .member-table th {
   position: sticky;
-  top: var(--topbar-h);
+  top: calc(var(--topbar-h) + 56px); /* Desktop filter bar height */
   z-index: 20;
   padding: 16px 18px;
   text-align: left;
@@ -1909,17 +1914,22 @@ select.form-input {
   .filter-bar {
     padding: 10px 16px;
     gap: 10px;
+    position: sticky;
+    top: var(--topbar-h);
+    z-index: 40;
+    background: var(--surface);
   }
   .table-wrap {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    margin-top: 20px;
   }
   .th-memo, .td-memo, .th-birthday, .td-birthday { display: none; }
   .member-table thead {
     position: static;
   }
   .member-table th {
-    top: var(--topbar-h);
+    top: calc(var(--topbar-h) + 48px); /* Mobile filter bar height */
   }
   .member-table th, .member-table td { padding: 12px 14px; }
   .card-grid {
