@@ -29,6 +29,7 @@
   --shadow-lg: 0 20px 40px -10px rgba(79, 70, 229, 0.15);
   --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   --sidebar-w: 260px;
+  --topbar-h: 70px;
 }
 
 html {
@@ -69,6 +70,7 @@ button {
 .login-overlay {
   position: fixed;
   inset: 0;
+  height: 100dvh;
   z-index: 9999;
   background: linear-gradient(135deg, #e0e7ff 0%, #ede9fe 50%, #f3e8ff 100%);
   display: flex;
@@ -76,6 +78,8 @@ button {
   justify-content: center;
   transition: opacity 0.4s ease, visibility 0.4s ease;
   padding: 20px;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .login-overlay.hidden {
@@ -792,6 +796,9 @@ button {
 .member-table thead {
   background: var(--surface2);
   border-bottom: 2px solid var(--border);
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 20;
 }
 
 .member-table th {
@@ -803,6 +810,7 @@ button {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
+  background: var(--surface2);
 }
 
 .member-table th.sortable {
@@ -1148,10 +1156,11 @@ button {
 /* ===== PAGINATION ===== */
 .pagination {
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   gap: 8px;
-  padding: 24px 0 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
 }
 
 .page-btn {
@@ -1868,7 +1877,7 @@ select.form-input {
 }
 
 @media (max-width: 768px) {
-  :root { --sidebar-w: 280px; }
+  :root { --sidebar-w: 280px; --topbar-h: 54px; }
   .sidebar {
     transform: translateX(calc(-1 * var(--sidebar-w)));
     z-index: 200;
@@ -1906,6 +1915,9 @@ select.form-input {
     -webkit-overflow-scrolling: touch;
   }
   .th-memo, .td-memo, .th-birthday, .td-birthday { display: none; }
+  .member-table thead {
+    top: var(--topbar-h);
+  }
   .member-table th, .member-table td { padding: 12px 14px; }
   .card-grid {
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));

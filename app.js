@@ -545,7 +545,15 @@ function toast(msg,type='info'){
 
 // HELPERS
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function fmtDate(d){if(!d)return'';const p=d.split('-');return p.length===3?`${p[0]}년 ${p[1]}월 ${p[2]}일`:d;}
+function fmtDate(d){
+  if(!d||d==='-')return'-';
+  const s=String(d).trim();
+  const p=s.split(/[-/.]/);
+  if(p.length===3){
+    return `${p[0]}년 ${parseInt(p[1])}월 ${parseInt(p[2])}일`;
+  }
+  return s;
+}
 
 // VIEW SWITCH
 function switchView(view){
