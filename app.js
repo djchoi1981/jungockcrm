@@ -8,7 +8,8 @@ let logoImg=localStorage.getItem('logoImg')||'';
 let currentView='list',sortCol='',sortDir=1,searchQ='',filterJob='all';
 let currentPage=1,cardPage=1,editingId=null,detailId=null;
 let changingPwTarget='user';
-let fsUnsub=null,migrationChecked=false,useLocalOnly=false;
+let fsUnsub=null,visUnsub=null,migrationChecked=false,useLocalOnly=false;
+let fieldVisibility=JSON.parse(localStorage.getItem('fieldVisibility')||JSON.stringify({job:true,name:true,birthday:true,phone:true,address:true,joindate:true,company:true,memo:true}));
 const PER=15,CPER=12;
 const CACHE_KEY='members_cache';
 
@@ -58,7 +59,12 @@ function initDatabase(){
     toast('Firebase 오류('+err.code+') - 로컬 저장 모드','error');
     members=loadCache();render();updateCount();
   });
-  fsUnsub=()=>{if(dbRef)dbRef.off('value',handler);};
+  const visRef=database.ref('settings/fieldVisibility');
+  const visHandler=visRef.on('value',snap=>{
+    const v=snap.val();
+    if(v){fieldVisibility={...fieldVisibility,...v};localStorage.setItem('fieldVisibility',JSON.stringify(fieldVisibility));render();}
+  });
+  fsUnsub=()=>{if(dbRef)dbRef.off('value',handler);if(visRef)visRef.off('value',visHandler);};
 }
 
 function checkMigration(loc){
@@ -101,6 +107,12 @@ function filtered(){
 }
 function page(arr,p,per){return arr.slice((p-1)*per,p*per);}
 
+function vf(k,val,fmt){
+  if(!isAdmin&&fieldVisibility[k]===false)return'<span class="badge-private">🔒 비공개</span>';
+  if(!val)return'-';
+  return fmt?fmt(val):esc(val);
+}
+
 // RENDER LIST
 function renderList(){
   const arr=filtered();
@@ -109,19 +121,24 @@ function renderList(){
   const tbl=document.querySelector('.member-table');
   if(!arr.length){tbody.innerHTML='';empty.style.display='flex';tbl.style.display='none';document.getElementById('pagination').innerHTML='';return;}
   empty.style.display='none';tbl.style.display='';
-  tbody.innerHTML=page(arr,currentPage,PER).map(m=>`
+  tbody.innerHTML=page(arr,currentPage,PER).map(m=>{
+    const addr=m.address?m.address.split('||').join(' '):'';
+    return `
     <tr data-id="${m.id}" onclick="openDetail('${m.id}')">
       <td>${m.photo?`<img class="table-photo" src="${m.photo}"/>`:`<div class="table-photo-placeholder">👤</div>`}</td>
-      <td><span class="name-cell">${esc(m.name)}</span></td>
-      <td>${esc(m.job||'-')}</td>
-      <td>${m.phone?`<a class="phone-link" href="tel:${m.phone.replace(/[^0-9+]/g,'')}" onclick="event.stopPropagation()">${esc(m.phone)}</a>`:'-'}</td>
-      <td><span class="email-cell">${esc(m.email||'-')}</span></td>
-      <td>${m.birthday?fmtDate(m.birthday):'-'}</td>
-      <td><span class="memo-cell">${esc(m.memo||'-')}</span></td>
+      <td>${vf('job',m.job)}</td>
+      <td><span class="name-cell">${vf('name',m.name)}</span></td>
+      <td>${vf('birthday',m.birthday,fmtDate)}</td>
+      <td>${vf('phone',m.phone,v=>`<a class="phone-link" href="tel:${v.replace(/[^0-9+]/g,'')}" onclick="event.stopPropagation()">${esc(v)}</a>`)}</td>
+      <td><span class="address-cell">${vf('address',addr)}</span></td>
+      <td>${vf('joindate',m.joindate,fmtDate)}</td>
+      <td>${vf('company',m.company)}</td>
+      <td><span class="memo-cell">${vf('memo',m.memo)}</span></td>
       <td onclick="event.stopPropagation()">
         <div class="action-btns"><button class="action-btn edit" onclick="openEdit('${m.id}')">✏️</button>${isAdmin?`<button class="action-btn del" onclick="delMember('${m.id}')">🗑️</button>`:''}</div>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   renderPagi(arr.length,currentPage,PER,document.getElementById('pagination'),p=>{currentPage=p;renderList();});
 }
 
@@ -136,9 +153,9 @@ function renderCards(){
     return `<div class="member-card" onclick="openDetail('${m.id}')">
       ${bd?'<div class="card-badge">🎂 이번달 생일</div>':''}
       ${m.photo?`<img class="card-photo" src="${m.photo}"/>`:`<div class="card-photo-placeholder">👤</div>`}
-      <div class="card-name">${esc(m.name)}</div>
-      <div class="card-job">${esc(m.job||'-')}</div>
-      ${m.phone?`<a class="card-phone" href="tel:${m.phone.replace(/[^0-9+]/g,'')}" onclick="event.stopPropagation()">📞 ${esc(m.phone)}</a>`:`<span class="card-phone">-</span>`}
+      <div class="card-name">${vf('name',m.name)}</div>
+      <div class="card-job">${vf('job',m.job)}</div>
+      <div class="card-phone-wrap">${vf('phone',m.phone,v=>`<a class="card-phone" href="tel:${v.replace(/[^0-9+]/g,'')}" onclick="event.stopPropagation()">📞 ${esc(v)}</a>`)}</div>
       <div class="card-actions" onclick="event.stopPropagation()"><button class="action-btn edit" onclick="openEdit('${m.id}')">✏️</button>${isAdmin?`<button class="action-btn del" onclick="delMember('${m.id}')">🗑️</button>`:''}</div>
     </div>`;
   }).join('');
@@ -248,16 +265,19 @@ function openDetail(id){
   document.getElementById('detail-body').innerHTML=`
     <div class="detail-header">
       ${m.photo?`<img class="detail-photo" src="${m.photo}"/>`:`<div class="detail-photo-placeholder">👤</div>`}
-      <div><div class="detail-name">${esc(m.name)}</div><div class="detail-job">${esc(m.job||'')}${m.company?' · '+esc(m.company):''}</div></div>
+      <div><div class="detail-name">${vf('name',m.name)}</div><div class="detail-job">${vf('job',m.job)}${m.company?' · '+vf('company',m.company):''}</div></div>
     </div>
     <div class="detail-fields">
-      ${df('📞','전화번호',m.phone,true)}${df('📧','이메일',m.email)}${df('⚧','성별',m.gender)}${df('🎂','생년월일',m.birthday?fmtDate(m.birthday):'')}${df('📅','가입일',m.joindate?fmtDate(m.joindate):'')}${(()=>{if(!m.address)return'';const p=m.address.split('||');return df('📍','주소',p[0]+(p[1]?' '+p[1]:''));})()}${df('📝','메모',m.memo)}
+      ${df('📞','전화번호',m.phone,true,'phone')}${df('💼','직책',m.job,false,'job')}${df('🎂','생년월일',m.birthday?fmtDate(m.birthday):'',false,'birthday')}${df('📅','최초위촉일',m.joindate?fmtDate(m.joindate):'',false,'joindate')}${df('🏢','추천인',m.company,false,'company')}${(()=>{const addr=m.address?m.address.split('||').join(' '):'';return df('📍','주소',addr,false,'address');})()}${df('📝','비고',m.memo,false,'memo')}
     </div>`;
   document.getElementById('btn-detail-delete').style.display=isAdmin?'inline-flex':'none';
   document.getElementById('btn-detail-edit').style.display='inline-flex';
   document.getElementById('detail-overlay').style.display='flex';
 }
-function df(icon,label,val,isPhone){
+function df(icon,label,val,isPhone,key){
+  if(!isAdmin&&fieldVisibility[key]===false){
+    return`<div class="detail-field"><span class="detail-field-icon">${icon}</span><div><div class="detail-field-label">${label}</div><div class="detail-field-value"><span class="badge-private">🔒 비공개</span></div></div></div>`;
+  }
   if(!val)return'';
   const display=isPhone?`<a href="tel:${val.replace(/[^0-9+]/g,'')}" style="color:var(--green);font-family:monospace;text-decoration:none;" onclick="event.stopPropagation()">📞 ${esc(val)}</a>`:esc(val);
   return`<div class="detail-field"><span class="detail-field-icon">${icon}</span><div><div class="detail-field-label">${label}</div><div class="detail-field-value">${display}</div></div></div>`;
@@ -398,7 +418,7 @@ function openAddressSearch(){
 // EXCEL
 function exportExcel(){
   if(!members.length){toast('내보낼 회원이 없습니다','error');return;}
-  const ws=XLSX.utils.json_to_sheet(members.map(m=>({이름:m.name,사진:m.photo||'',성별:m.gender,전화번호:m.phone,이메일:m.email,직업:m.job,소속:m.company,생년월일:m.birthday,가입일:m.joindate,주소:m.address,메모:m.memo})));
+  const ws=XLSX.utils.json_to_sheet(members.map(m=>({직책:m.job||'',성명:m.name||'',생년월일:m.birthday||'',전화번호:m.phone||'',주소:m.address||'',최초위촉일:m.joindate||'',추천인:m.company||'',비고:m.memo||'',사진:m.photo||''})));
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'회원명부');
   XLSX.writeFile(wb,`회원명부_${new Date().toISOString().slice(0,10)}.xlsx`);
   toast('엑셀 다운로드 완료 📥','success');
@@ -412,15 +432,19 @@ function importExcel(file){
       const updates={};
       let n=0;
       rows.forEach(r=>{
-        const name=r['이름']||r['name']||'';if(!name)return;
+        const name=r['성명']||r['이름']||r['name']||'';if(!name)return;
         const id=Date.now().toString()+'_'+n+'_'+Math.random().toString(36).substr(2,5);
         updates[id]={
           id,
-          name:String(name).trim(),gender:String(r['성별']||'').trim(),
-          phone:String(r['전화번호']||r['phone']||'').trim(),email:String(r['이메일']||'').trim(),
-          job:String(r['직업']||'').trim(),company:String(r['소속']||'').trim(),
-          birthday:String(r['생년월일']||'').trim(),joindate:String(r['가입일']||'').trim(),
-          address:String(r['주소']||'').trim(),memo:String(r['메모']||'').trim(),photo:String(r['사진']||r['photo']||'').trim()};
+          name:String(name).trim(),
+          job:String(r['직책']||r['직업']||r['job']||'').trim(),
+          birthday:String(r['생년월일']||r['birthday']||'').trim(),
+          phone:String(r['전화번호']||r['phone']||'').trim(),
+          address:String(r['주소']||r['address']||'').trim(),
+          joindate:String(r['최초위촉일']||r['가입일']||r['joindate']||'').trim(),
+          company:String(r['추천인']||r['소속']||r['company']||'').trim(),
+          memo:String(r['비고']||r['메모']||r['memo']||'').trim(),
+          photo:String(r['사진']||r['photo']||'').trim()};
         n++;
       });
       if(!n){toast('가져올 회원 데이터가 없습니다','error');return;}
@@ -518,6 +542,30 @@ document.getElementById('btn-logout-all').addEventListener('click',()=>{
   toast('로그아웃되었습니다','info');
 });
 document.getElementById('admin-menu-close').addEventListener('click',()=>document.getElementById('admin-overlay').style.display='none');
+
+// Settings Visibility
+document.getElementById('btn-settings-visibility')?.addEventListener('click',()=>{
+  document.getElementById('admin-overlay').style.display='none';
+  ['job','name','birthday','phone','address','joindate','company','memo'].forEach(k=>{
+    const cb=document.getElementById('vis-'+k);
+    if(cb)cb.checked=fieldVisibility[k]!==false;
+  });
+  document.getElementById('visibility-overlay').style.display='flex';
+});
+document.getElementById('visibility-close')?.addEventListener('click',()=>document.getElementById('visibility-overlay').style.display='none');
+document.getElementById('visibility-cancel')?.addEventListener('click',()=>document.getElementById('visibility-overlay').style.display='none');
+document.getElementById('visibility-overlay')?.addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.style.display='none';});
+document.getElementById('visibility-save')?.addEventListener('click',async ()=>{
+  ['job','name','birthday','phone','address','joindate','company','memo'].forEach(k=>{
+    const cb=document.getElementById('vis-'+k);
+    if(cb)fieldVisibility[k]=cb.checked;
+  });
+  localStorage.setItem('fieldVisibility',JSON.stringify(fieldVisibility));
+  render();
+  if(!useLocalOnly&&database){try{await database.ref('settings/fieldVisibility').set(fieldVisibility);}catch(err){console.error(err);}}
+  document.getElementById('visibility-overlay').style.display='none';
+  toast('일반모드 공개 설정이 저장되었습니다 💾','success');
+});
 
 // Change PW (user)
 document.getElementById('btn-change-user-pw').addEventListener('click',()=>{

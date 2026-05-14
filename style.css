@@ -680,7 +680,7 @@ button {
   padding: 12px 28px;
   border-bottom: 1px solid var(--border);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   background: var(--surface);
   gap: 16px;
@@ -691,6 +691,25 @@ button {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  max-height: 85px;
+  overflow-y: auto;
+  padding-right: 6px;
+  flex: 1;
+}
+/* 커스텀 슬림 스크롤바 */
+.filter-chips::-webkit-scrollbar {
+  width: 5px;
+}
+.filter-chips::-webkit-scrollbar-track {
+  background: var(--surface2);
+  border-radius: 4px;
+}
+.filter-chips::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.filter-chips::-webkit-scrollbar-thumb:hover {
+  background: var(--text3);
 }
 
 .chip {
@@ -824,13 +843,52 @@ button {
 }
 
 .th-photo { width: 70px; }
-.th-name { min-width: 100px; }
-.th-job { min-width: 110px; }
-.th-phone { min-width: 140px; }
-.th-email { min-width: 180px; }
-.th-birthday { min-width: 120px; }
-.th-memo { min-width: 180px; }
-.th-actions { width: 100px; text-align: center; }
+.th-job { min-width: 100px; }
+.th-name { min-width: 90px; }
+.th-birthday { min-width: 110px; }
+.th-phone { min-width: 130px; }
+.th-address { min-width: 160px; }
+.th-joindate { min-width: 110px; }
+.th-company { min-width: 110px; }
+.th-memo { min-width: 140px; }
+.th-actions { width: 90px; text-align: center; }
+
+/* Visibility Toggle Switches */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--surface2);
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.95rem;
+  transition: all var(--transition);
+  user-select: none;
+}
+.toggle-row:hover {
+  background: var(--surface-hover);
+}
+.toggle-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Private Badge */
+.badge-private {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--red-light);
+  color: var(--red);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
 
 .table-photo {
   width: 44px;
