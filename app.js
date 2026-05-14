@@ -431,11 +431,45 @@ function exportExcel(){
   XLSX.writeFile(wb,`회원명부_${new Date().toISOString().slice(0,10)}.xlsx`);
   toast('엑셀 다운로드 완료 📥','success');
 }
+function parseExcelDate(v){
+  if(!v) return '';
+  if(v instanceof Date){
+    if(isNaN(v)) return '';
+    const y=v.getFullYear(), m=String(v.getMonth()+1).padStart(2,'0'), d=String(v.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+  const s=String(v).trim();
+  if(!s) return '';
+  if(/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(s)){
+    const p=s.split(/[-/.]/);
+    return `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}`;
+  }
+  if(/^\d{4,5}$/.test(s)){
+    const serial=parseInt(s,10);
+    const date=new Date((serial-25569)*86400*1000);
+    const y=date.getUTCFullYear(), m=String(date.getUTCMonth()+1).padStart(2,'0'), d=String(date.getUTCDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+  if(/^\d{8}$/.test(s)){
+    return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+  }
+  if(/^\d{6}$/.test(s)){
+    const yy=parseInt(s.slice(0,2),10);
+    const year=yy>30?1900+yy:2000+yy;
+    return `${year}-${s.slice(2,4)}-${s.slice(4,6)}`;
+  }
+  const parsed=new Date(s);
+  if(!isNaN(parsed)){
+    const y=parsed.getFullYear(), m=String(parsed.getMonth()+1).padStart(2,'0'), d=String(parsed.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+  return s;
+}
 function importExcel(file){
   const reader=new FileReader();
   reader.onload=async e=>{
     try{
-      const wb=XLSX.read(e.target.result,{type:'array'});
+      const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
       const updates={};
       let n=0;
@@ -460,10 +494,10 @@ function importExcel(file){
           id,
           name,
           job:String(r['직책']||r['직업']||r['job']||'').trim(),
-          birthday:String(r['생년월일']||r['birthday']||'').trim(),
+          birthday:parseExcelDate(r['생년월일']||r['birthday']),
           phone,
           address:String(r['주소']||r['address']||'').trim(),
-          joindate:String(r['최초위촉일']||r['가입일']||r['joindate']||'').trim(),
+          joindate:parseExcelDate(r['최초위촉일']||r['가입일']||r['joindate']),
           company:String(r['추천인']||r['소속']||r['company']||'').trim(),
           memo:String(r['비고']||r['메모']||r['memo']||'').trim(),
           photo:String(r['사진']||r['photo']||'').trim()};
