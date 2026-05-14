@@ -388,7 +388,6 @@ button {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   transition: margin-left var(--transition);
   background: var(--bg);
 }
@@ -1895,7 +1894,8 @@ select.form-input {
   .admin-only-btns .btn-secondary span:not(:first-child) { display: none; }
   .content-area {
     padding: 16px;
-    max-height: calc(100vh - 120px);
+    max-height: none;
+    overflow: visible;
   }
   .filter-bar {
     padding: 10px 16px;
