@@ -119,7 +119,7 @@ function renderList(){
       <td>${m.birthday?fmtDate(m.birthday):'-'}</td>
       <td><span class="memo-cell">${esc(m.memo||'-')}</span></td>
       <td onclick="event.stopPropagation()">
-        ${isAdmin?`<div class="action-btns"><button class="action-btn edit" onclick="openEdit('${m.id}')">✏️</button><button class="action-btn del" onclick="delMember('${m.id}')">🗑️</button></div>`:''}
+        <div class="action-btns"><button class="action-btn edit" onclick="openEdit('${m.id}')">✏️</button>${isAdmin?`<button class="action-btn del" onclick="delMember('${m.id}')">🗑️</button>`:''}</div>
       </td>
     </tr>`).join('');
   renderPagi(arr.length,currentPage,PER,document.getElementById('pagination'),p=>{currentPage=p;renderList();});
@@ -139,7 +139,7 @@ function renderCards(){
       <div class="card-name">${esc(m.name)}</div>
       <div class="card-job">${esc(m.job||'-')}</div>
       ${m.phone?`<a class="card-phone" href="tel:${m.phone.replace(/[^0-9+]/g,'')}" onclick="event.stopPropagation()">📞 ${esc(m.phone)}</a>`:`<span class="card-phone">-</span>`}
-      ${isAdmin?`<div class="card-actions" onclick="event.stopPropagation()"><button class="action-btn edit" onclick="openEdit('${m.id}')">✏️</button><button class="action-btn del" onclick="delMember('${m.id}')">🗑️</button></div>`:''}
+      <div class="card-actions" onclick="event.stopPropagation()"><button class="action-btn edit" onclick="openEdit('${m.id}')">✏️</button>${isAdmin?`<button class="action-btn del" onclick="delMember('${m.id}')">🗑️</button>`:''}</div>
     </div>`;
   }).join('');
   renderPagi(arr.length,cardPage,CPER,document.getElementById('pagination-card'),p=>{cardPage=p;renderCards();});
@@ -205,13 +205,13 @@ function applyAdminUI(){
   const detDel=document.getElementById('btn-detail-delete');
   const detEdit=document.getElementById('btn-detail-edit');
   detDel.style.display=isAdmin?'inline-flex':'none';
-  detEdit.style.display=isAdmin?'inline-flex':'none';
+  detEdit.style.display='inline-flex';
 
   document.getElementById('logo-img-edit-btn').style.display=isAdmin?'flex':'none';
   document.getElementById('logo-name-edit-btn').style.display=isAdmin?'inline-flex':'none';
 
   const thAct=document.getElementById('th-actions');
-  thAct.style.display=isAdmin?'table-cell':'none';
+  thAct.style.display='table-cell';
 
   render();
 }
@@ -251,7 +251,7 @@ function openDetail(id){
       ${df('📞','전화번호',m.phone,true)}${df('📧','이메일',m.email)}${df('⚧','성별',m.gender)}${df('🎂','생년월일',m.birthday?fmtDate(m.birthday):'')}${df('📅','가입일',m.joindate?fmtDate(m.joindate):'')}${(()=>{if(!m.address)return'';const p=m.address.split('||');return df('📍','주소',p[0]+(p[1]?' '+p[1]:''));})()}${df('📝','메모',m.memo)}
     </div>`;
   document.getElementById('btn-detail-delete').style.display=isAdmin?'inline-flex':'none';
-  document.getElementById('btn-detail-edit').style.display=isAdmin?'inline-flex':'none';
+  document.getElementById('btn-detail-edit').style.display='inline-flex';
   document.getElementById('detail-overlay').style.display='flex';
 }
 function df(icon,label,val,isPhone){
@@ -296,11 +296,12 @@ async function saveMember(){
   const phoneClean=phone.replace(/\D/g,'');
   const dupPhone=members.find(m=>m.id!==editingId && m.phone && m.phone.replace(/\D/g,'')===phoneClean);
   if(dupPhone){
-    if(!confirm(`⚠️ 이미 동일한 전화번호로 등록된 \n권자: ${dupPhone.name}\n\n계속 등록하시겠습니까?`))return;
-  }
-  const dupName=members.find(m=>m.id!==editingId && m.name===name);
-  if(dupName && !dupPhone){
-    if(!confirm(`⚠️ '​${name}'이름의 회원이 이미 있습니다.\n\n계속 등록하시겠습니까?`))return;
+    if(!confirm(`⚠️ 이미 동일한 전화번호(${dupPhone.phone})로 등록된 기존 회원(${dupPhone.name})이 존재합니다.\n\n그래도 중복으로 저장하시겠습니까?`))return;
+  } else {
+    const dupName=members.find(m=>m.id!==editingId && m.name===name);
+    if(dupName){
+      if(!confirm(`⚠️ '${name}' 이름을 가진 회원이 이미 존재합니다.\n\n동명이인으로 저장하시겠습니까?`))return;
+    }
   }
 
   const memberId=editingId||Date.now().toString();
@@ -406,9 +407,10 @@ function importExcel(file){
       const wb=XLSX.read(e.target.result,{type:'array'});
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
       const updates={};
+      let n=0;
       rows.forEach(r=>{
         const name=r['이름']||r['name']||'';if(!name)return;
-        const id=Date.now().toString()+Math.random();
+        const id=Date.now().toString()+'_'+n+'_'+Math.random().toString(36).substr(2,5);
         updates[id]={
           id,
           name:String(name).trim(),gender:String(r['성별']||'').trim(),
@@ -418,8 +420,20 @@ function importExcel(file){
           address:String(r['주소']||'').trim(),memo:String(r['메모']||'').trim(),photo:''};
         n++;
       });
-      await database.ref('members').update(updates);
-      toast(`${n}명 가져오기 완료 📤`,'success');
+      if(!n){toast('가져올 회원 데이터가 없습니다','error');return;}
+
+      if(useLocalOnly){
+        Object.values(updates).forEach(m=>members.push(m));
+        saveCache();render();updateCount();
+        toast(`${n}명 로컬 가져오기 완료 📤`,'success');
+      }else{
+        // 화면 즉시 갱신을 위해 로컬 배열에 선반영
+        Object.values(updates).forEach(m=>members.push(m));
+        saveCache();render();updateCount();
+
+        await database.ref('members').update(updates);
+        toast(`${n}명 엑셀 업로드 완료 📤`,'success');
+      }
     }catch(err){toast('파일 읽기 오류: '+err.message,'error');}
   };reader.readAsArrayBuffer(file);
 }
