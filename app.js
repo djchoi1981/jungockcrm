@@ -300,7 +300,7 @@ function openAdd(){editingId=null;document.getElementById('modal-title').textCon
 function openEdit(id){
   editingId=id;const m=members.find(x=>x.id===id);if(!m)return;
   document.getElementById('modal-title').textContent='회원 수정';
-  ['name','gender','phone','email','job','company','birthday','joindate','memo'].forEach(f=>{const el=document.getElementById('field-'+f);if(el)el.value=m[f]||'';});
+  ['name','phone','job','company','birthday','joindate','memo'].forEach(f=>{const el=document.getElementById('field-'+f);if(el)el.value=m[f]||'';});
   // 주소 스플릿: 첫 줄이 기본 주소, 나머지가 상세주소
   if(m.address){
     const parts=m.address.split('||');
@@ -318,7 +318,7 @@ function openEdit(id){
   document.getElementById('detail-overlay').style.display='none';
 }
 function clearForm(){
-  ['name','gender','phone','email','job','company','birthday','joindate','address','address-detail','memo'].forEach(f=>{const el=document.getElementById('field-'+f);if(el)el.value='';});
+  ['name','phone','job','company','birthday','joindate','address','address-detail','memo'].forEach(f=>{const el=document.getElementById('field-'+f);if(el)el.value='';});
   document.getElementById('photo-preview').innerHTML='<span class="photo-placeholder">👤</span>';
 }
 async function saveMember(){
@@ -351,8 +351,8 @@ async function saveMember(){
   const address=addrBase+(addrDet?'||'+addrDet:'');
 
   const data={name,phone,photo,address,
-    gender:document.getElementById('field-gender').value,
-    email:document.getElementById('field-email').value.trim(),
+    gender:'',
+    email:'',
     job:document.getElementById('field-job').value.trim(),
     company:document.getElementById('field-company').value.trim(),
     birthday:document.getElementById('field-birthday').value,
