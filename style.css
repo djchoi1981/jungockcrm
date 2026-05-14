@@ -788,7 +788,8 @@ button {
 
 .member-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.9rem;
 }
 
@@ -1967,3 +1968,7 @@ select.form-input {
   .search-input:focus { width: 150px; }
   .stats-grid { grid-template-columns: 1fr; }
 }
+
+.birthday-row-highlight { background: #fffbeb !important; }
+.birthday-row-highlight:hover { background: #fef3c7 !important; }
+.birthday-row-highlight td { border-bottom: 1px solid #fde68a !important; }

@@ -113,6 +113,21 @@ function vf(k,val,fmt){
   return fmt?fmt(val):esc(val);
 }
 
+function isBirthdayMonth(d){
+  if(!d)return false;
+  const m2=new Date().getMonth()+1;
+  let s=String(d).trim();
+  if(/^\d{4,5}$/.test(s)){
+    const serial=parseInt(s,10);
+    const date=new Date(Math.round((serial-25569)*86400*1000));
+    return (date.getUTCMonth()+1)===m2;
+  }
+  const p=s.split(/[-/.]/);
+  if(p.length===3)return parseInt(p[1])===m2;
+  if(p.length===2)return parseInt(p[0])===m2;
+  return false;
+}
+
 // RENDER LIST
 function renderList(){
   const arr=filtered();
@@ -122,7 +137,6 @@ function renderList(){
   if(!arr.length){tbody.innerHTML='';empty.style.display='flex';tbl.style.display='none';document.getElementById('pagination').innerHTML='';return;}
   empty.style.display='none';tbl.style.display='';
   
-  // 비공개 항목인 경우 테이블 열(컬럼) 자체를 숨김 처리
   const cols=['job','name','birthday','phone','address','joindate','company','memo'];
   cols.forEach(k=>{
     const th=document.querySelector(`.th-${k}`);
@@ -132,11 +146,12 @@ function renderList(){
 
   tbody.innerHTML=page(arr,currentPage,PER).map(m=>{
     const addr=m.address?m.address.split('||').join(' '):'';
+    const isBD=isBirthdayMonth(m.birthday);
     return `
-    <tr data-id="${m.id}" onclick="openDetail('${m.id}')">
+    <tr data-id="${m.id}" onclick="openDetail('${m.id}')"${isBD?' class="birthday-row-highlight"':''}>
       <td>${m.photo?`<img class="table-photo" src="${m.photo}"/>`:`<div class="table-photo-placeholder">👤</div>`}</td>
       <td${tdVis('job')}>${esc(m.job||'-')}</td>
-      <td${tdVis('name')}><span class="name-cell">${esc(m.name)}</span></td>
+      <td${tdVis('name')}><span class="name-cell">${esc(m.name)}${isBD?' 🎂':''}</span></td>
       <td${tdVis('birthday')}>${m.birthday?fmtDate(m.birthday):'-'}</td>
       <td${tdVis('phone')}>${m.phone?`<a class="phone-link" href="tel:${m.phone.replace(/[^0-9+]/g,'')}" onclick="event.stopPropagation()">${esc(m.phone)}</a>`:'-'}</td>
       <td${tdVis('address')}><span class="address-cell">${esc(addr||'-')}</span></td>
@@ -155,10 +170,9 @@ function renderList(){
 function renderCards(){
   const arr=filtered();
   const grid=document.getElementById('card-grid');
-  const m2=new Date().getMonth()+1;
   if(!arr.length){grid.innerHTML='<div class="empty-state" style="display:flex"><div class="empty-icon">👥</div><div class="empty-title">회원이 없습니다</div></div>';document.getElementById('pagination-card').innerHTML='';return;}
   grid.innerHTML=page(arr,cardPage,CPER).map(m=>{
-    const bd=m.birthday&&parseInt(m.birthday.split('-')[1])===m2;
+    const bd=isBirthdayMonth(m.birthday);
     return `<div class="member-card" onclick="openDetail('${m.id}')">
       ${bd?'<div class="card-badge">🎂 이번달 생일</div>':''}
       ${m.photo?`<img class="card-photo" src="${m.photo}"/>`:`<div class="card-photo-placeholder">👤</div>`}
