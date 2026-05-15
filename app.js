@@ -349,7 +349,7 @@ async function saveMember(){
 
   // 중복 체크 (이름 또는 전화번호가 동일한 경우 등록 제외)
   const phoneClean=phone.replace(/\D/g,'');
-  const dup=members.find(m=>m.id!==editingId && (m.name===name || (m.phone && m.phone.replace(/\D/g,'')===phoneClean)));
+  const dup=members.find(m=>m.id!==editingId && (m.name===name || (m.phone && String(m.phone).replace(/\D/g,'')===phoneClean)));
   if(dup){
     toast(`등록 제외: 이미 동일한 이름 또는 전화번호(${dup.name} / ${dup.phone})가 존재합니다.`,'error');
     return;
@@ -358,12 +358,18 @@ async function saveMember(){
   const memberId=editingId||Date.now().toString();
   const img=document.getElementById('photo-preview').querySelector('img');
   let photo=img?img.src:'';
-  if(photo.startsWith('data:')){
+  
+  if(photo.startsWith('data:') && !useLocalOnly){
     try{
       const r=storage.ref('photos/'+memberId);
-      await r.putString(photo,'data_url');photo=await r.getDownloadURL();
+      const uploadTask = (async () => {
+        await r.putString(photo,'data_url');
+        return await r.getDownloadURL();
+      })();
+      const timeoutTask = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+      photo = await Promise.race([uploadTask, timeoutTask]);
     }catch(e){
-      console.warn('Storage upload failed, fallback to base64 DB storage', e);
+      console.warn('Storage upload failed or timeout, fallback to base64 DB storage', e);
       // photo 변수에 base64 문자열이 그대로 유지되므로 DB에 직접 저장됨
     }
   }
@@ -382,23 +388,24 @@ async function saveMember(){
     joindate:document.getElementById('field-joindate').value,
     memo:document.getElementById('field-memo').value.trim(),
     updatedAt:new Date().toISOString()};
-  try{
-    if(useLocalOnly){
-      const idx=members.findIndex(x=>x.id===memberId);
-      if(idx>=0)members[idx]={id:memberId,...data};else members.push({id:memberId,...data});
-      saveCache();render();updateCount();
-      toast(editingId?'수정되었습니다 ✅':'등록되었습니다 ✅','success');
-    }else{
-      await database.ref('members/'+memberId).set({...data,id:memberId});
-      toast(editingId?'수정되었습니다 ✅':'등록되었습니다 ✅','success');
-    }
-    document.getElementById('modal-overlay').style.display='none';
-  }catch(e){
-    const idx=members.findIndex(x=>x.id===memberId);
-    if(idx>=0)members[idx]={id:memberId,...data};else members.push({id:memberId,...data});
-    saveCache();render();updateCount();
-    toast('로컬에 임시저장 (오류: '+e.code+')','error');
-    document.getElementById('modal-overlay').style.display='none';
+
+  // 1. 로컬 UI 즉시 업데이트 (반응성 극대화)
+  const idx=members.findIndex(x=>x.id===memberId);
+  if(idx>=0)members[idx]={id:memberId,...data};
+  else members.push({id:memberId,...data});
+  saveCache();
+  render();
+  updateCount();
+  
+  toast(editingId?'수정되었습니다 ✅':'등록되었습니다 ✅','success');
+  document.getElementById('modal-overlay').style.display='none';
+
+  // 2. 백그라운드 서버 저장
+  if(!useLocalOnly && typeof database !== 'undefined'){
+    database.ref('members/'+memberId).set({...data,id:memberId}).catch(e=>{
+      console.error('Firebase save error:', e);
+      // 백그라운드 에러 발생 시 사용자에게 굳이 알리지 않음 (이미 로컬 캐시됨)
+    });
   }
 }
 
