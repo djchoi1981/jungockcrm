@@ -362,7 +362,10 @@ async function saveMember(){
     try{
       const r=storage.ref('photos/'+memberId);
       await r.putString(photo,'data_url');photo=await r.getDownloadURL();
-    }catch(e){photo='';}
+    }catch(e){
+      console.warn('Storage upload failed, fallback to base64 DB storage', e);
+      // photo 변수에 base64 문자열이 그대로 유지되므로 DB에 직접 저장됨
+    }
   }
 
   // 주소 합치기
